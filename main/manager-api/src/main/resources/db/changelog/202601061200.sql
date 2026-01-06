@@ -1,0 +1,8 @@
+-- Add Piper local streaming TTS provider
+delete from `ai_model_provider` where id = 'SYSTEM_TTS_PiperTTS';
+INSERT INTO `ai_model_provider` (`id`, `model_type`, `provider_code`, `name`, `fields`, `sort`, `creator`, `create_date`, `updater`, `update_date`) VALUES
+('SYSTEM_TTS_PiperTTS', 'TTS', 'piper', 'Piper Local Streaming Speech Synthesis', '[{"key":"model_path","label":"Model Path (onnx)","type":"string"},{"key":"config_path","label":"Model Config Path (json)","type":"string"},{"key":"sample_rate","label":"Sample Rate","type":"number"},{"key":"format","label":"Audio Format","type":"string"},{"key":"speaker_id","label":"Speaker ID","type":"number"},{"key":"length_scale","label":"Speed Ratio","type":"number"},{"key":"noise_scale","label":"Noise Ratio","type":"number"},{"key":"noise_w","label":"Noise Offset","type":"number"},{"key":"sentence_silence","label":"Silence Between Sentences (s)","type":"number"},{"key":"output_dir","label":"Output Directory","type":"string"}]', 24, 1, NOW(), 1, NOW());
+
+-- Add Piper local streaming TTS model config
+delete from `ai_model_config` where id = 'TTS_PiperTTS';
+INSERT INTO `ai_model_config` VALUES ('TTS_PiperTTS', 'TTS', 'PiperTTS', 'Piper Local Streaming Speech Synthesis', 0, 1, '{"type": "piper", "model_path": "models/piper/vais1000/vi_VN-vais1000-medium.onnx", "config_path": "models/piper/vais1000/vi_VN-vais1000-medium.onnx.json", "sample_rate": 22050, "format": "pcm", "speaker_id": null, "length_scale": 1.0, "noise_scale": 0.667, "noise_w": 0.8, "sentence_silence": 0.2, "output_dir": "tmp/"}', 'https://github.com/OHF-Voice/piper1-gpl', 'Offline piper-tts, local model inference, supports streaming PCM output', 24, NULL, NULL, NULL, NULL);

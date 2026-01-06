@@ -997,6 +997,19 @@ TTS:
     access_token: "U4YdYXVfpwWnk2t5Gp822zWPCuORyeJL"
     voice: "OUeAo1mhq6IBExi"
     output_dir: tmp/
+  PiperTTS:
+    # Local Piper (piper-tts) streaming TTS using onnx model files
+    type: piper
+    model_path: models/piper/vais1000/vi_VN-vais1000-medium.onnx
+    config_path: models/piper/vais1000/vi_VN-vais1000-medium.onnx.json
+    sample_rate: 24000        # Will fall back to model config if omitted
+    format: pcm
+    speaker_id: null          # Optional speaker id for multi-speaker models
+    length_scale: 1.0         # <1.0 faster, >1.0 slower
+    noise_scale: 0.667
+    noise_w: 0.8
+    sentence_silence: 0.2     # seconds of silence between sentences
+    output_dir: tmp/
   PaddleSpeechTTS:
     # Baidu PaddleSpeech supports local offline deployment and model training
     # Framework: https://www.paddlepaddle.org.cn/
