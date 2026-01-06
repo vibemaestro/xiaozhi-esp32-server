@@ -10,7 +10,6 @@ Please refer to the relevant code in core/connection.py for implementation detai
 """
 
 import time
-
 import opuslib_next
 
 from config.manage_api_client import report as manage_report
@@ -18,7 +17,7 @@ from config.manage_api_client import report as manage_report
 TAG = __name__
 
 
-def report(conn, type, text, opus_data, report_time):
+async def report(conn, type, text, opus_data, report_time):
     """Execute chat history reporting operation
 
     Args:
@@ -33,8 +32,8 @@ def report(conn, type, text, opus_data, report_time):
             audio_data = opus_to_wav(conn, opus_data)
         else:
             audio_data = None
-        # Execute reporting
-        manage_report(
+        # Execute asynchronous reporting
+        await manage_report(
             mac_address=conn.device_id,
             session_id=conn.session_id,
             chat_type=type,
@@ -56,41 +55,49 @@ def opus_to_wav(conn, opus_data):
     Returns:
         bytes: WAV audio data
     """
-    decoder = opuslib_next.Decoder(16000, 1)  # 16kHz, single channel
-    pcm_data = []
+    decoder = None
+    try:
+        decoder = opuslib_next.Decoder(16000, 1)  # 16kHz, single channel
+        pcm_data = []
 
-    for opus_packet in opus_data:
-        try:
-            pcm_frame = decoder.decode(opus_packet, 960)  # 960 samples = 60ms
-            pcm_data.append(pcm_frame)
-        except opuslib_next.OpusError as e:
-            conn.logger.bind(tag=TAG).error(f"Opus解码错误: {e}", exc_info=True)
+        for opus_packet in opus_data:
+            try:
+                pcm_frame = decoder.decode(opus_packet, 960)  # 960 samples = 60ms
+                pcm_data.append(pcm_frame)
+            except opuslib_next.OpusError as e:
+                conn.logger.bind(tag=TAG).error(f"Opus decoding error: {e}", exc_info=True)
 
-    if not pcm_data:
-        raise ValueError("No valid PCM data")
+        if not pcm_data:
+            raise ValueError("No valid PCM data")
 
-    # Create WAV header
-    pcm_data_bytes = b"".join(pcm_data)
-    num_samples = len(pcm_data_bytes) // 2  # 16-bit samples
+        # Create WAV header
+        pcm_data_bytes = b"".join(pcm_data)
+        num_samples = len(pcm_data_bytes) // 2  # 16-bit samples
 
-    # WAV header
-    wav_header = bytearray()
-    wav_header.extend(b"RIFF")  # ChunkID
-    wav_header.extend((36 + len(pcm_data_bytes)).to_bytes(4, "little"))  # ChunkSize
-    wav_header.extend(b"WAVE")  # Format
-    wav_header.extend(b"fmt ")  # Subchunk1ID
-    wav_header.extend((16).to_bytes(4, "little"))  # Subchunk1Size
-    wav_header.extend((1).to_bytes(2, "little"))  # AudioFormat (PCM)
-    wav_header.extend((1).to_bytes(2, "little"))  # NumChannels
-    wav_header.extend((16000).to_bytes(4, "little"))  # SampleRate
-    wav_header.extend((32000).to_bytes(4, "little"))  # ByteRate
-    wav_header.extend((2).to_bytes(2, "little"))  # BlockAlign
-    wav_header.extend((16).to_bytes(2, "little"))  # BitsPerSample
-    wav_header.extend(b"data")  # Subchunk2ID
-    wav_header.extend(len(pcm_data_bytes).to_bytes(4, "little"))  # Subchunk2Size
+        # WAV header
+        wav_header = bytearray()
+        wav_header.extend(b"RIFF")  # ChunkID
+        wav_header.extend((36 + len(pcm_data_bytes)).to_bytes(4, "little"))  # ChunkSize
+        wav_header.extend(b"WAVE")  # Format
+        wav_header.extend(b"fmt ")  # Subchunk1ID
+        wav_header.extend((16).to_bytes(4, "little"))  # Subchunk1Size
+        wav_header.extend((1).to_bytes(2, "little"))  # AudioFormat (PCM)
+        wav_header.extend((1).to_bytes(2, "little"))  # NumChannels
+        wav_header.extend((16000).to_bytes(4, "little"))  # SampleRate
+        wav_header.extend((32000).to_bytes(4, "little"))  # ByteRate
+        wav_header.extend((2).to_bytes(2, "little"))  # BlockAlign
+        wav_header.extend((16).to_bytes(2, "little"))  # BitsPerSample
+        wav_header.extend(b"data")  # Subchunk2ID
+        wav_header.extend(len(pcm_data_bytes).to_bytes(4, "little"))  # Subchunk2Size
 
-    # Return complete WAV data
-    return bytes(wav_header) + pcm_data_bytes
+        # Return complete WAV data
+        return bytes(wav_header) + pcm_data_bytes
+    finally:
+        if decoder is not None:
+            try:
+                del decoder
+            except Exception as e:
+                conn.logger.bind(tag=TAG).debug(f"Error releasing decoder resource: {e}")
 
 
 def enqueue_tts_report(conn, text, opus_data):

@@ -11,12 +11,12 @@
 
 1、如果你是源码部署，你的`mqtt-websocket`地址是：
 ```
-ws://127.0.0.1:8000/xiaozhi/v1?from=mqtt_gateway
+ws://127.0.0.1:8000/xiaozhi/v1/?from=mqtt_gateway
 ```
 
 2、如果你是docker部署，你的`mqtt-websocket`地址是
 ```
-ws://你宿主机局域网IP:8000/xiaozhi/v1?from=mqtt_gateway
+ws://你宿主机局域网IP:8000/xiaozhi/v1/?from=mqtt_gateway
 ```
 
 ## 重要提示
@@ -53,7 +53,7 @@ cp config/mqtt.json.example config/mqtt.json
 {
     "production": {
         "chat_servers": [
-            "ws://127.0.0.1:8000/xiaozhi/v1?from=mqtt_gateway"
+            "ws://127.0.0.1:8000/xiaozhi/v1/?from=mqtt_gateway"
         ]
     },
     "debug": false,
@@ -76,6 +76,7 @@ MQTT_PORT=1883            # MQTT服务器端口
 UDP_PORT=8884             # UDP服务器端口
 API_PORT=8007             # 管理API端口
 MQTT_SIGNATURE_KEY=test   # MQTT签名密钥
+SERVER_SECRET=Te1st12134  # 服务器密钥，请保持和智控台（server.secret）一致或者和xiaozhi-server里（server.auth_key）保持一致
 ```
 请注意`PUBLIC_IP`配置，确保其与实际公网IP一致，如果有域名就填域名。
 
@@ -84,6 +85,13 @@ MQTT_SIGNATURE_KEY=test   # MQTT签名密钥
 - 注意不要用简单的密码，比如`123456`、`test`等。
 - 注意不要用简单的密码，比如`123456`、`test`等。
 - 注意不要用简单的密码，比如`123456`、`test`等。
+
+`SERVER_SECRET` 是用生成websocket连接的认证信息。
+
+1、如果你是全模块部署，且你的智控台的参数管理里`server.auth.enabled`设置成了`true`，那么，`SERVER_SECRET`需要和智控台（`server.secret`）保持一致。
+
+2、如果你是单模块部署，且你在配置文件里把`server.auth.enabled`设置成了`true`，那么，`SERVER_SECRET`需要和配置文件里（`server.auth_key`）保持一致。
+
 
 6. 启动MQTT网关
 ```

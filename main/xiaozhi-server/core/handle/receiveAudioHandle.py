@@ -123,7 +123,7 @@ async def max_out_size(conn):
     text = "I'm sorry, I have something to do, we'll chat again tomorrow, okay? See you tomorrow, bye!"
     await send_stt_message(conn, text)
     file_path = "config/assets/max_output_size.wav"
-    opus_packets = audio_to_data(file_path)
+    opus_packets = await audio_to_data(file_path)
     conn.tts.tts_audio_queue.put((SentenceType.LAST, opus_packets, text))
     conn.close_after_chat = True
 
@@ -142,7 +142,7 @@ async def check_bind_device(conn):
 
         # Play notification sound
         music_path = "config/assets/bind_code.wav"
-        opus_packets = audio_to_data(music_path)
+        opus_packets = await audio_to_data(music_path)
         conn.tts.tts_audio_queue.put((SentenceType.FIRST, opus_packets, text))
 
         # Play each digit
@@ -150,7 +150,7 @@ async def check_bind_device(conn):
             try:
                 digit = conn.bind_code[i]
                 num_path = f"config/assets/bind_code/{digit}.wav"
-                num_packets = audio_to_data(num_path)
+                num_packets = await audio_to_data(num_path)
                 conn.tts.tts_audio_queue.put((SentenceType.MIDDLE, num_packets, None))
             except Exception as e:
                 conn.logger.bind(tag=TAG).error(f"Failed to play digit audio: {e}")
@@ -162,5 +162,5 @@ async def check_bind_device(conn):
         text = f"No version information found for this device, please correctly configure the OTA address, then recompile the firmware."
         await send_stt_message(conn, text)
         music_path = "config/assets/bind_not_found.wav"
-        opus_packets = audio_to_data(music_path)
+        opus_packets = await audio_to_data(music_path)
         conn.tts.tts_audio_queue.put((SentenceType.LAST, opus_packets, text))

@@ -4,6 +4,7 @@ import json
 import copy
 import wave
 import socket
+import asyncio
 import requests
 import subprocess
 import numpy as np
@@ -224,7 +225,10 @@ def check_ffmpeg_installed() -> bool:
             error_msg.append("⚠️ 发现缺少依赖库：libiconv.so.2")
             error_msg.append("解决方法：在当前 conda 环境中执行：")
             error_msg.append("   conda install -c conda-forge libiconv\n")
-        elif "no such file or directory" in stderr_output and "ffmpeg" in stderr_output.lower():
+        elif (
+            "no such file or directory" in stderr_output
+            and "ffmpeg" in stderr_output.lower()
+        ):
             error_msg.append("⚠️ 系统未找到 ffmpeg 可执行文件。")
             error_msg.append("解决方法：在当前 conda 环境中执行：")
             error_msg.append("   conda install -c conda-forge ffmpeg\n")
@@ -245,7 +249,9 @@ def extract_json_from_string(input_string):
     return None
 
 
-def audio_to_data_stream(audio_file_path, is_opus=True, callback: Callable[[Any], Any]=None) -> None:
+def audio_to_data_stream(
+    audio_file_path, is_opus=True, callback: Callable[[Any], Any] = None
+) -> None:
     # 获取文件后缀名
     file_type = os.path.splitext(audio_file_path)[1]
     if file_type:
@@ -262,58 +268,88 @@ def audio_to_data_stream(audio_file_path, is_opus=True, callback: Callable[[Any]
     raw_data = audio.raw_data
     pcm_to_data_stream(raw_data, is_opus, callback)
 
-def audio_to_data(audio_file_path: str, is_opus: bool = True) -> list[bytes]:
+
+async def audio_to_data(
+    audio_file_path: str, is_opus: bool = True, use_cache: bool = True
+) -> list[bytes]:
     """
     将音频文件转换为Opus/PCM编码的帧列表
     Args:
         audio_file_path: 音频文件路径
         is_opus: 是否进行Opus编码
+        use_cache: 是否使用缓存
     """
-    # 获取文件后缀名
-    file_type = os.path.splitext(audio_file_path)[1]
-    if file_type:
-        file_type = file_type.lstrip(".")
-    # 读取音频文件，-nostdin 参数：不要从标准输入读取数据，否则FFmpeg会阻塞
-    audio = AudioSegment.from_file(
-        audio_file_path, format=file_type, parameters=["-nostdin"]
-    )
+    from core.utils.cache.manager import cache_manager
+    from core.utils.cache.config import CacheType
 
-    # 转换为单声道/16kHz采样率/16位小端编码（确保与编码器匹配）
-    audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+    # 生成缓存键，包含文件路径和编码类型
+    cache_key = f"{audio_file_path}:{is_opus}"
 
-    # 获取原始PCM数据（16位小端）
-    raw_data = audio.raw_data
+    # 尝试从缓存获取结果
+    if use_cache:
+        cached_result = cache_manager.get(CacheType.AUDIO_DATA, cache_key)
+        if cached_result is not None:
+            return cached_result
 
-    # 初始化Opus编码器
-    encoder = opuslib_next.Encoder(16000, 1, opuslib_next.APPLICATION_AUDIO)
+    def _sync_audio_to_data():
+        # 获取文件后缀名
+        file_type = os.path.splitext(audio_file_path)[1]
+        if file_type:
+            file_type = file_type.lstrip(".")
+        # 读取音频文件，-nostdin 参数：不要从标准输入读取数据，否则FFmpeg会阻塞
+        audio = AudioSegment.from_file(
+            audio_file_path, format=file_type, parameters=["-nostdin"]
+        )
 
-    # 编码参数
-    frame_duration = 60  # 60ms per frame
-    frame_size = int(16000 * frame_duration / 1000)  # 960 samples/frame
+        # 转换为单声道/16kHz采样率/16位小端编码（确保与编码器匹配）
+        audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
 
-    datas = []
-    # 按帧处理所有音频数据（包括最后一帧可能补零）
-    for i in range(0, len(raw_data), frame_size * 2):  # 16bit=2bytes/sample
-        # 获取当前帧的二进制数据
-        chunk = raw_data[i : i + frame_size * 2]
+        # 获取原始PCM数据（16位小端）
+        raw_data = audio.raw_data
 
-        # 如果最后一帧不足，补零
-        if len(chunk) < frame_size * 2:
-            chunk += b"\x00" * (frame_size * 2 - len(chunk))
+        # 初始化Opus编码器
+        encoder = opuslib_next.Encoder(16000, 1, opuslib_next.APPLICATION_AUDIO)
 
-        if is_opus:
-            # 转换为numpy数组处理
-            np_frame = np.frombuffer(chunk, dtype=np.int16)
-            # 编码Opus数据
-            frame_data = encoder.encode(np_frame.tobytes(), frame_size)
-        else:
-            frame_data = chunk if isinstance(chunk, bytes) else bytes(chunk)
+        # 编码参数
+        frame_duration = 60  # 60ms per frame
+        frame_size = int(16000 * frame_duration / 1000)  # 960 samples/frame
 
-        datas.append(frame_data)
+        datas = []
+        # 按帧处理所有音频数据（包括最后一帧可能补零）
+        for i in range(0, len(raw_data), frame_size * 2):  # 16bit=2bytes/sample
+            # 获取当前帧的二进制数据
+            chunk = raw_data[i : i + frame_size * 2]
 
-    return datas
+            # 如果最后一帧不足，补零
+            if len(chunk) < frame_size * 2:
+                chunk += b"\x00" * (frame_size * 2 - len(chunk))
 
-def audio_bytes_to_data_stream(audio_bytes, file_type, is_opus, callback: Callable[[Any], Any]) -> None:
+            if is_opus:
+                # 转换为numpy数组处理
+                np_frame = np.frombuffer(chunk, dtype=np.int16)
+                # 编码Opus数据
+                frame_data = encoder.encode(np_frame.tobytes(), frame_size)
+            else:
+                frame_data = chunk if isinstance(chunk, bytes) else bytes(chunk)
+
+            datas.append(frame_data)
+
+        return datas
+
+    loop = asyncio.get_running_loop()
+    # 在单独的线程中执行同步的音频处理操作
+    result = await loop.run_in_executor(None, _sync_audio_to_data)
+
+    # 将结果存入缓存，使用配置中定义的TTL（10分钟）
+    if use_cache:
+        cache_manager.set(CacheType.AUDIO_DATA, cache_key, result)
+
+    return result
+
+
+def audio_bytes_to_data_stream(
+    audio_bytes, file_type, is_opus, callback: Callable[[Any], Any]
+) -> None:
     """
     直接用音频二进制数据转为opus/pcm数据，支持wav、mp3、p3
     """
@@ -357,31 +393,40 @@ def pcm_to_data_stream(raw_data, is_opus=True, callback: Callable[[Any], Any] = 
             frame_data = chunk if isinstance(chunk, bytes) else bytes(chunk)
             callback(frame_data)
 
+
 def opus_datas_to_wav_bytes(opus_datas, sample_rate=16000, channels=1):
     """
     将opus帧列表解码为wav字节流
     """
     decoder = opuslib_next.Decoder(sample_rate, channels)
-    pcm_datas = []
+    try:
+        pcm_datas = []
 
-    frame_duration = 60  # ms
-    frame_size = int(sample_rate * frame_duration / 1000)  # 960
+        frame_duration = 60  # ms
+        frame_size = int(sample_rate * frame_duration / 1000)  # 960
 
-    for opus_frame in opus_datas:
-        # 解码为PCM（返回bytes，2字节/采样点）
-        pcm = decoder.decode(opus_frame, frame_size)
-        pcm_datas.append(pcm)
+        for opus_frame in opus_datas:
+            # 解码为PCM（返回bytes，2字节/采样点）
+            pcm = decoder.decode(opus_frame, frame_size)
+            pcm_datas.append(pcm)
 
-    pcm_bytes = b"".join(pcm_datas)
+        pcm_bytes = b"".join(pcm_datas)
 
-    # 写入wav字节流
-    wav_buffer = BytesIO()
-    with wave.open(wav_buffer, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(2)  # 16bit
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm_bytes)
-    return wav_buffer.getvalue()
+        # 写入wav字节流
+        wav_buffer = BytesIO()
+        with wave.open(wav_buffer, "wb") as wf:
+            wf.setnchannels(channels)
+            wf.setsampwidth(2)  # 16bit
+            wf.setframerate(sample_rate)
+            wf.writeframes(pcm_bytes)
+        return wav_buffer.getvalue()
+    finally:
+        if decoder is not None:
+            try:
+                del decoder
+            except Exception:
+                pass
+
 
 def check_vad_update(before_config, new_config):
     if (
@@ -456,6 +501,17 @@ def filter_sensitive_info(config: dict) -> dict:
                 filtered[k] = _filter_dict(v)
             elif isinstance(v, list):
                 filtered[k] = [_filter_dict(i) if isinstance(i, dict) else i for i in v]
+            elif isinstance(v, str):
+                try:
+                    json_data = json.loads(v)
+                    if isinstance(json_data, dict):
+                        filtered[k] = json.dumps(
+                            _filter_dict(json_data), ensure_ascii=False
+                        )
+                    else:
+                        filtered[k] = v
+                except (json.JSONDecodeError, TypeError):
+                    filtered[k] = v
             else:
                 filtered[k] = v
         return filtered

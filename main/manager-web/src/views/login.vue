@@ -10,7 +10,7 @@
             gap: 10px;
           ">
           <img loading="lazy" alt="" src="@/assets/xiaozhi-logo.png" style="width: 45px; height: 45px" />
-          <img loading="lazy" alt="" src="@/assets/xiaozhi-ai.png" style="height: 18px" />
+          <img loading="lazy" alt="" :src="xiaozhiAiIcon" style="height: 18px" />
         </div>
       </el-header>
       <div class="login-person">
@@ -48,6 +48,12 @@
                 </el-dropdown-item>
                 <el-dropdown-item @click.native="changeLanguage('en')">
                   {{ $t("language.en") }}
+                </el-dropdown-item>
+                <el-dropdown-item @click.native="changeLanguage('de')">
+                  {{ $t("language.de") }}
+                </el-dropdown-item>
+                <el-dropdown-item @click.native="changeLanguage('vi')">
+                  {{ $t("language.vi") }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </el-dropdown>
@@ -150,6 +156,7 @@ import VersionFooter from "@/components/VersionFooter.vue";
 import i18n, { changeLanguage } from "@/i18n";
 import { getUUID, goToPage, showDanger, showSuccess, sm2Encrypt, validateMobile } from "@/utils";
 import { mapState } from "vuex";
+import featureManager from "@/utils/featureManager";
 
 export default {
   name: "login",
@@ -177,8 +184,30 @@ export default {
           return this.$t("language.zhTW");
         case "en":
           return this.$t("language.en");
+        case "de":
+          return this.$t("language.de");
+        case "vi":
+          return this.$t("language.vi");
         default:
           return this.$t("language.zhCN");
+      }
+    },
+    // 根据当前语言获取对应的xiaozhi-ai图标
+    xiaozhiAiIcon() {
+      const currentLang = this.currentLanguage;
+      switch (currentLang) {
+        case "zh_CN":
+          return require("@/assets/xiaozhi-ai.png");
+        case "zh_TW":
+          return require("@/assets/xiaozhi-ai_zh_TW.png");
+        case "en":
+          return require("@/assets/xiaozhi-ai_en.png");
+        case "de":
+          return require("@/assets/xiaozhi-ai_de.png");
+        case "vi":
+          return require("@/assets/xiaozhi-ai_vi.png");
+        default:
+          return require("@/assets/xiaozhi-ai.png");
       }
     },
   },
@@ -204,6 +233,13 @@ export default {
     this.$store.dispatch("fetchPubConfig").then(() => {
       // 根据配置决定默认登录方式
       this.isMobileLogin = this.enableMobileRegister;
+      
+      // pub-config接口调用完成后，重新初始化featureManager以确保使用最新的配置
+      featureManager.waitForInitialization().then(() => {
+        console.log('featureManager重新初始化完成，使用pub-config配置');
+      }).catch(error => {
+        console.warn('featureManager重新初始化失败:', error);
+      });
     });
   },
   methods: {

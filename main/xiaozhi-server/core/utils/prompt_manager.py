@@ -4,7 +4,6 @@
 """
 
 import os
-import cnlunar
 from typing import Dict, Any
 from config.logger import setup_logging
 from jinja2 import Template
@@ -60,13 +59,20 @@ class PromptManager:
 
         self.cache_manager = cache_manager
         self.CacheType = CacheType
+        
+        # 初始化上下文源
+        from core.utils.context_provider import ContextDataProvider
+        self.context_provider = ContextDataProvider(config, self.logger)
+        self.context_data = {}
 
         self._load_base_template()
 
     def _load_base_template(self):
         """加载基础提示词模板"""
         try:
-            template_path = self.config.get("prompt_template", "agent-base-prompt.txt")
+            template_path = self.config.get("prompt_template", None)
+            if not template_path:
+                template_path = "agent-base-prompt.txt"
             cache_key = f"prompt_template:{template_path}"
 
             # 先从缓存获取
@@ -117,8 +123,12 @@ class PromptManager:
 
     def _get_current_time_info(self) -> tuple:
         """获取当前时间信息"""
-        from .current_time import get_current_date, get_current_weekday, get_current_lunar_date
-        
+        from .current_time import (
+            get_current_date,
+            get_current_weekday,
+            get_current_lunar_date,
+        )
+
         today_date = get_current_date()
         today_weekday = get_current_weekday()
         lunar_date = get_current_lunar_date() + "\n"
@@ -174,11 +184,34 @@ class PromptManager:
     def update_context_info(self, conn, client_ip: str):
         """同步更新上下文信息"""
         try:
-            # 获取位置信息（使用全局缓存）
-            local_address = self._get_location_info(client_ip)
-            # 获取天气信息（使用全局缓存）
-            self._get_weather_info(conn, local_address)
-            self.logger.bind(tag=TAG).info(f"上下文信息更新完成")
+            local_address = ""
+            if (
+                client_ip
+                and self.base_prompt_template
+                and (
+                    "local_address" in self.base_prompt_template
+                    or "weather_info" in self.base_prompt_template
+                )
+            ):
+                # 获取位置信息（使用全局缓存）
+                local_address = self._get_location_info(client_ip)
+
+            if (
+                self.base_prompt_template
+                and "weather_info" in self.base_prompt_template
+                and local_address
+            ):
+                # 获取天气信息（使用全局缓存）
+                self._get_weather_info(conn, local_address)
+            
+            # 获取配置的上下文数据
+            if hasattr(conn, "device_id") and conn.device_id:
+                if self.base_prompt_template and "dynamic_context" in self.base_prompt_template:
+                    self.context_data = self.context_provider.fetch_all(conn.device_id)
+                else:
+                    self.context_data = ""
+                
+            self.logger.bind(tag=TAG).debug(f"上下文信息更新完成")
 
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"更新上下文信息失败: {e}")
@@ -192,9 +225,7 @@ class PromptManager:
 
         try:
             # 获取最新的时间信息（不缓存）
-            today_date, today_weekday, lunar_date = (
-                self._get_current_time_info()
-            )
+            today_date, today_weekday, lunar_date = self._get_current_time_info()
 
             # 获取缓存的上下文信息
             local_address = ""
@@ -226,7 +257,9 @@ class PromptManager:
                 emojiList=EMOJI_List,
                 device_id=device_id,
                 client_ip=client_ip,
-                *args, **kwargs
+                dynamic_context=self.context_data,
+                *args,
+                **kwargs,
             )
             device_cache_key = f"device_prompt:{device_id}"
             self.cache_manager.set(

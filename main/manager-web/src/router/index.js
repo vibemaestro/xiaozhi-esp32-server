@@ -87,6 +87,28 @@ const routes = [
       title: '参数管理'
     }
   },
+  {
+    path: '/knowledge-base-management',
+    name: 'KnowledgeBaseManagement',
+    component: function () {
+      return import('../views/KnowledgeBaseManagement.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '知识库管理'
+    }
+  },
+  {
+    path: '/knowledge-file-upload',
+    name: 'KnowledgeFileUpload',
+    component: function () {
+      return import('../views/KnowledgeFileUpload.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '文档上传管理'
+    }
+  },
 
   {
     path: '/server-side-management',
@@ -162,6 +184,18 @@ const routes = [
       return import('../views/TemplateQuickConfig.vue')
     }
   },
+  // 功能配置页面路由
+  {
+    path: '/feature-management',
+    name: 'FeatureManagement',
+    component: function () {
+      return import('../views/FeatureManagement.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '功能配置'
+    }
+  },
 ]
 const router = new VueRouter({
   base: process.env.VUE_APP_PUBLIC_PATH || '/',
@@ -183,7 +217,7 @@ VueRouter.prototype.push = function push(location) {
 }
 
 // 需要登录才能访问的路由
-const protectedRoutes = ['home', 'RoleConfig', 'DeviceManagement', 'UserManagement', 'ModelConfig']
+const protectedRoutes = ['home', 'RoleConfig', 'DeviceManagement', 'UserManagement', 'ModelConfig', 'KnowledgeBaseManagement', 'KnowledgeFileUpload']
 
 // 路由守卫
 router.beforeEach((to, from, next) => {

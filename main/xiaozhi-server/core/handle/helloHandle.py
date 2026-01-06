@@ -43,15 +43,15 @@ async def handleHelloMessage(conn, msg_json):
     audio_params = msg_json.get("audio_params")
     if audio_params:
         format = audio_params.get("format")
-        conn.logger.bind(tag=TAG).info(f"Client audio format: {format}")
+        conn.logger.bind(tag=TAG).debug(f"Client audio format: {format}")
         conn.audio_format = format
         conn.welcome_msg["audio_params"] = audio_params
     features = msg_json.get("features")
     if features:
-        conn.logger.bind(tag=TAG).info(f"Client features: {features}")
+        conn.logger.bind(tag=TAG).debug(f"Client features: {features}")
         conn.features = features
         if features.get("mcp"):
-            conn.logger.bind(tag=TAG).info("Client supports MCP")
+            conn.logger.bind(tag=TAG).debug("Client supports MCP")
             conn.mcp_client = MCPClient()
             # Send initialization
             asyncio.create_task(send_mcp_initialize_message(conn))
@@ -101,7 +101,7 @@ async def checkWakeupWords(conn, text):
         }
 
     # Get audio data
-    opus_packets = audio_to_data(response.get("file_path"))
+    opus_packets = await audio_to_data(response.get("file_path"), use_cache=False)
     # Play wakeup word reply
     conn.client_abort = False
 

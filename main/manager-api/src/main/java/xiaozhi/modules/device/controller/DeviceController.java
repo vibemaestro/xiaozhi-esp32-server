@@ -69,13 +69,15 @@ public class DeviceController {
     public Result<String> registerDevice(@RequestBody DeviceRegisterDTO deviceRegisterDTO) {
         String macAddress = deviceRegisterDTO.getMacAddress();
         if (StringUtils.isBlank(macAddress)) {
-            return new Result<String>().error(ErrorCode.NOT_NULL, "mac地址不能为空");
+            return new Result<String>().error(ErrorCode.MCA_NOT_NULL);
         }
         // 生成六位验证码
-        String code = String.valueOf(Math.random()).substring(2, 8);
-        String key = RedisKeys.getDeviceCaptchaKey(code);
+        String code;
+        String key;
         String existsMac = null;
         do {
+            code = String.valueOf(Math.random()).substring(2, 8);
+            key = RedisKeys.getDeviceCaptchaKey(code);
             existsMac = (String) redisUtils.get(key);
         } while (StringUtils.isNotBlank(existsMac));
 

@@ -73,11 +73,14 @@ enable_greeting: true
 enable_stop_tts_notify: false
 # End-of-utterance notification sound file path
 stop_tts_notify_voice: "config/assets/tts_notify.mp3"
+# 是否启用WebSocket心跳保活机制
+enable_websocket_ping: false
 
-# TTS音频发送延迟配置
-# tts_audio_send_delay: 控制音频包发送间隔
-#   0: 使用精确时间控制，严格匹配音频帧率（默认，运行时按音频帧率计算）
-#   > 0: 使用固定延迟（毫秒）发送，例如: 60
+
+# TTS audio send delay configuration
+# tts_audio_send_delay: Control audio packet send interval
+#   0: Use precise time control, strictly match audio frame rate (default, calculated at runtime according to audio frame rate)
+#   > 0: Use fixed delay (milliseconds) to send, e.g.: 60
 tts_audio_send_delay: 0
 
 exit_commands:
@@ -97,14 +100,14 @@ xiaozhi:
 # Module test configuration
 module_test:
   test_sentences:
-    - "你好，请介绍一下你自己"
+    - "Hello, please introduce yourself."
     - "What's the weather like today?"
-    - "请用100字概括量子计算的基本原理和应用前景"
+    - "Summarize the basic principles and application prospects of quantum computing in 100 words."
 
 # Wake words, used to distinguish between wake word and speech content
 wakeup_words:
-  - "你好小智"
-  - "嘿你好呀"
+  - "Hello XiaoZhi"
+  - "Hey, how are you?"
   - "你好小志"
   - "小爱同学"
   - "你好小鑫"
@@ -114,10 +117,19 @@ wakeup_words:
   - "喵喵同学"
   - "小滨小滨"
   - "小冰小冰"
-# MCP access point address, format: ws://your_mcp_endpoint_ip_or_domain:port/mcp/?token=your_token
-# Detailed guide: https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/mcp-endpoint-integration.md
-mcp_endpoint: your access point websocket address
-# Plugin base configuration
+# MCP endpoint address, format: ws://your mcp endpoint ip or domain:port/mcp/?token=your token
+# Detailed tutorial: https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/mcp-endpoint-integration.md
+mcp_endpoint: your endpoint websocket address
+
+# Context source configuration
+# Used to inject dynamic data into the system prompt, such as health data, stock information, etc.
+# Multiple context sources can be added
+context_providers:
+  - url: ""
+    headers:
+      Authorization: ""
+
+# Plugin basic configuration
 plugins:
   # Weather plugin configuration, fill in your api_key here
   # This key is shared by the project; if used too much it may get limited
@@ -150,9 +162,17 @@ plugins:
       - ".mp3"
       - ".wav"
       - ".p3"
-    refresh_time: 300     # Interval for refreshing the music list (seconds)
-
-# Voiceprint recognition configuration
+    refresh_time: 300 # Refresh music list time interval, in seconds
+  search_from_ragflow:
+    # Description of the knowledge base, to help the large language model know when to call this method
+    description: "当用户问xxx时，调用本方法，使用知识库中的信息回答问题"
+    # ragflow interface configuration
+    base_url: "http://192.168.0.8"
+    # ragflow api access token
+    api_key: "ragflow-xxx"
+    # ragflow knowledge base id
+    dataset_ids: ["123456789"]
+# 声纹识别配置
 voiceprint:
   # Voiceprint interface address
   url: 
@@ -244,6 +264,7 @@ Intent:
     functions:
       - change_role
       - get_weather
+      # - search_from_ragflow
       # - get_news_from_chinanews
       - get_news_from_newsnow
       # play_music is the server’s built-in music playback; hass_play_music is for Home Assistant controlled playback.
@@ -327,9 +348,16 @@ ASR:
     appid: your volcengine TTS appid
     access_token: your volcengine TTS access_token
     cluster: volcengine_input_common
-    # Hotword/replacement word usage: https://www.volcengine.com/docs/6561/155738
-    boosting_table_name: (optional) your hotword table name
-    correct_table_name: (optional) your replacement table name
+    # Hotword, replacement word usage process: https://www.volcengine.com/docs/6561/155738
+    boosting_table_name: (optional) your hotword file name
+    correct_table_name: (optional) your replacement word file name
+    # Whether to enable multi-language recognition mode
+    enable_multilingual: False
+    # Multi-language recognition, when this key is empty, the model supports Chinese, English, Shanghainese, Minnan, Sichuan, Shaanxi, and Cantonese recognition. When it is set to a specific key, it can recognize specified languages.
+    # Detailed language list reference: https://www.volcengine.com/docs/6561/1354869
+    # language: zh-cn
+    # End of sentence detection time (ms), controls silence duration before breaking sentence, default 200ms
+    end_window_size: 200
     output_dir: tmp/
   TencentASR:
     # Token registration: https://console.cloud.tencent.com/cam/capi
@@ -451,17 +479,41 @@ ASR:
     # - APIKey
     type: xunfei_stream
     # Required parameters - iFlytek Open Platform app info
-    app_id: your APPID
-    api_key: your APIKey
-    api_secret: your APISecret
+    app_id: 你的APPID
+    api_key: 你的APIKey
+    api_secret: 你的APISecret
     # ASR recognition parameters
-    domain: slm        # Recognition domain: iat=daily, medical, finance, etc.
-    language: zh_cn    # Language: zh_cn=Chinese, en_us=English
-    accent: mandarin   # Accent: mandarin=Mandarin
-    dwa: wpgs          # Dynamic correction: wpgs=real-time return
+    domain: slm # Recognition domain: iat:日常用语，medical:医疗，finance:金融等
+    language: zh_cn # Language: zh_cn:中文，en_us:英文
+    accent: mandarin # Accent: mandarin:普通话
     # Adjust audio processing params for longer voice quality
     output_dir: tmp/
-  
+  AliyunBLStreamASR:
+    # Aliyun Paraformer real-time speech recognition service
+    # WebSocket real-time streaming speech recognition, supports multi-language, custom hot words, semantic sentence cutting, etc.
+    # Platform address: https://bailian.console.aliyun.com/
+    # API Key address: https://bailian.console.aliyun.com/#/api-key
+    # Document address: https://help.aliyun.com/zh/model-studio/websocket-for-paraformer-real-time-service
+    # Supported models: paraformer-realtime-v2(recommended), paraformer-realtime-8k-v2, paraformer-realtime-v1, paraformer-realtime-8k-v1
+    type: aliyunbl_stream
+    # Required parameters
+    api_key: 你的阿里云百炼API密钥
+    # Model selection, recommended to use v2 version
+    model: paraformer-realtime-v2
+    # Audio format and sample rate
+    format: pcm
+    sample_rate: 16000  # v2 supports any sample rate, v1 only supports 16000, 8k version only supports 8000
+    # Optional parameters
+    disfluency_removal_enabled: false  # Whether to filter filler words (such as "um", "ah", etc.)
+    semantic_punctuation_enabled: false  # Semantic punctuation(true: meeting scene, accurate; false: VAD sentence cutting, interactive scene, low latency)
+    max_sentence_silence: 200  # VAD sentence cutting silence duration threshold(ms), range 200-6000, only effective when VAD sentence cutting is enabled
+    multi_threshold_mode_enabled: false  # Prevent VAD sentence cutting from being too long, only effective when VAD sentence cutting is enabled
+    punctuation_prediction_enabled: true  # Whether to automatically add punctuation
+    inverse_text_normalization_enabled: true  # Whether to enable ITN(Chinese numbers to Arabic numbers)
+    # Custom hot words document address: https://help.aliyun.com/zh/model-studio/custom-hot-words?
+    # vocabulary_id: vocab-xxx-24ee19fa8cfb4d52902170a0xxxxxxxx  # Hot word ID(optional)
+    # language_hints: ["zh", "en"]  # Specify language(optional), supports zh, en, ja, yue, ko, de, fr, ru
+    output_dir: tmp/  
 VAD:
   SileroVAD:
     type: silero
@@ -483,8 +535,7 @@ LLM:
     temperature: 0.7  # Temperature
     max_tokens: 500   # Max tokens
     top_p: 1
-    top_k: 50
-    frequency_penalty: 0
+    frequency_penalty: 0  # Frequency penalty
   AliAppLLM:
     # LLM API type
     type: AliBL
@@ -664,9 +715,15 @@ TTS:
     access_token: your volcengine access_token
     resource_id: volc.service_type.10029
     speaker: zh_female_wanwanxiaohe_moon_bigtts
+    # 开启WebSocket连接复用，默认复用（注意：复用后设备处于聆听状态时空闲链接会占并发数）
+    enable_ws_reuse: True
     speech_rate: 0
     loudness_rate: 0
     pitch: 0
+    # 多情感音色参数，注意：当前仅部分音色支持设置情感。
+    # 相关音色列表：https://www.volcengine.com/docs/6561/1257544
+    emotion: "neutral"  # 情感类型，可选值为：neutral、happy、sad、angry、fearful、disgusted、surprised
+    emotion_scale: 4  # 情感强度，可选值为：1~5，默认值为4
   CosyVoiceSiliconflow:
     type: siliconflow
     # SiliconFlow TTS
@@ -990,26 +1047,13 @@ TTS:
     api_key: your api_key
     voice: x5_lingxiaoxuan_flow
     output_dir: tmp/
-<<<<<<< HEAD
-    # The following are optional defaults. Note: V5 voice does not support oral config.
-    # oral_level: mid   # Orality: high, mid, low
-    # spark_assist: 1   # Use large model for orality: 1=on, 0=off
-    # stop_split: 0     # Server-side sentence split: 0=on, 1=off
-    # remain: 0         # Preserve original wording: 1=keep, 0=not keep
-    # format: raw       # Audio formats: raw(PCM), lame(MP3), speex, opus, opus-wb, opus-swb, speex-wb
-    # sample_rate: 24000 # Sample rates: 16000, 8000, 24000
-    # volume: 50        # Volume: 0-100
-    # speed: 50         # Speed: 0-100
-    # pitch: 50         # Pitch: 0-100
-=======
-    # 以下可不用设置，使用默认设置，注意V5音色不支持口语化配置
-    # oral_level: mid  # 口语化等级：high, mid, low
-    # spark_assist: 1  # 是否通过大模型进行口语化 开启:1, 关闭:0
-    # stop_split: 0  # 关闭服务端拆句 不关闭：0，关闭：1
-    # remain: 0  # 是否保留原书面语的样子	保留:1, 不保留:0
-    # format: raw  # 音频格式：raw(PCM), lame(MP3), speex, opus, opus-wb, opus-swb, speex-wb
-    # sample_rate: 24000  # 采样率：16000, 8000, 24000
-    # volume: 50  # 音量：0-100
-    # speed: 50  # 语速：0-100
-    # pitch: 50  # 语调：0-100
->>>>>>> fork/main
+    # The following can be left unset, use default settings, note that V5 voice does not support oral configuration
+    # oral_level: mid  # Orality level: high, mid, low
+    # spark_assist: 1  # Whether to use large model for orality: 1=on, 0=off
+    # stop_split: 0  # Server-side sentence split: 0=on, 1=off
+    # remain: 0  # Preserve original wording: 1=keep, 0=not keep
+    # format: raw  # Audio format: raw(PCM), lame(MP3), speex, opus, opus-wb, opus-swb, speex-wb
+    # sample_rate: 24000  # Sample rate: 16000, 8000, 24000
+    # volume: 50  # Volume: 0-100
+    # speed: 50  # Speed: 0-100
+    # pitch: 50  # Pitch: 0-100

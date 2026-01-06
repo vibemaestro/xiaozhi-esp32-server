@@ -80,7 +80,7 @@ xiaozhi-server
 打开命令行工具，使用`终端`或`命令行`工具 进入到你的`xiaozhi-server`，执行以下命令
 
 ```
-docker-compose up -d
+docker compose up -d
 ```
 
 执行完后，再执行以下命令，查看日志信息。

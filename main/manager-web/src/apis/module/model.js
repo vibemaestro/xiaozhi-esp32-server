@@ -337,5 +337,23 @@ export default {
           this.getPluginFunctionList(params, callback)
         })
       }).send()
+  },
+
+  // 获取RAG模型列表
+  getRAGModels(callback) {
+    RequestService.sendRequest()
+      .url(`${getServiceUrl()}/datasets/rag-models`)
+      .method('GET')
+      .success((res) => {
+        RequestService.clearRequestTime()
+        callback(res)
+      })
+      .networkFail((err) => {
+        console.error('获取RAG模型列表失败:', err)
+        this.$message.error(err.msg || '获取RAG模型列表失败')
+        RequestService.reAjaxFun(() => {
+          this.getRAGModels(callback)
+        })
+      }).send()
   }
 }

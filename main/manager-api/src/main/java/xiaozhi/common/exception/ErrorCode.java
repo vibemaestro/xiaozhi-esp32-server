@@ -119,10 +119,6 @@ public interface ErrorCode {
     int VOICEPRINT_UNREGISTER_PROCESS_ERROR = 10090; // 声纹注销处理失败
     int VOICEPRINT_IDENTIFY_REQUEST_ERROR = 10091; // 声纹识别请求失败
 
-    // 设备相关错误码
-    int MAC_ADDRESS_ALREADY_EXISTS = 10161; // Mac地址已存在
-    // 模型相关错误码
-    int MODEL_PROVIDER_NOT_EXIST = 10162; // 供应器不存在
     int LLM_NOT_EXIST = 10092; // 设置的LLM不存在
     int MODEL_REFERENCED_BY_AGENT = 10093; // 该模型配置已被智能体引用，无法删除
     int LLM_REFERENCED_BY_INTENT = 10094; // 该LLM模型已被意图识别配置引用，无法删除
@@ -198,4 +194,50 @@ public interface ErrorCode {
     int VOICE_CLONE_PREFIX = 10158; // 复刻音色前缀
     int VOICE_ID_ALREADY_EXISTS = 10159; // 音色ID已存在
     int VOICE_CLONE_HUOSHAN_VOICE_ID_ERROR = 10160; // 火山引擎音色ID格式错误
+
+    // 设备相关错误码
+    int MAC_ADDRESS_ALREADY_EXISTS = 10161; // Mac地址已存在
+    // 模型相关错误码
+    int MODEL_PROVIDER_NOT_EXIST = 10162; // 供应器不存在
+
+    // 知识库相关错误码
+    int Knowledge_Base_RECORD_NOT_EXISTS = 10163; // 知识库记录不存在
+    int RAG_CONFIG_NOT_FOUND = 10164; // RAG配置未找到
+    int RAG_CONFIG_TYPE_ERROR = 10165; // RAG配置类型错误
+    int RAG_DEFAULT_CONFIG_NOT_FOUND = 10166; // 默认RAG配置未找到
+    int RAG_API_ERROR = 10167; // RAG调用失败
+    int UPLOAD_FILE_ERROR = 10168; // 上传文件失败
+    int NO_PERMISSION = 10169; // 没有权限
+    int KNOWLEDGE_BASE_NAME_EXISTS = 10170; // 同名知识库已存在
+    int RAG_API_ERROR_URL_NULL = 10171; // RAG配置中base_url为空，请完善配置
+    int RAG_API_ERROR_API_KEY_NULL = 10172; // RAG配置中api_key为空，请完善配置
+    int RAG_API_ERROR_API_KEY_INVALID = 10173; // RAG配置中api_key包含占位符，请替换为实际的API密钥
+    int RAG_API_ERROR_URL_INVALID = 10174; // RAG配置中base_url格式不正确，请检查协议是否正确
+    int RAG_DATASET_ID_NOT_NULL = 10176; // RAG配置中dataset_id不能为空
+    int RAG_MODEL_ID_NOT_NULL = 10177; // RAG配置中model_id不能为空
+    int RAG_DATASET_ID_AND_MODEL_ID_NOT_NULL = 10178; // RAG配置中dataset_id和model_id不能为空
+    int RAG_FILE_NAME_NOT_NULL = 10179; // 文件名称不能为空
+    int RAG_FILE_CONTENT_EMPTY = 10180; // 文件内容不能为空
+
+    // 设备相关错误码（补充）
+    int MCA_NOT_NULL = 10175; // mac地址不能为空
+
+    // 音色克隆（补充）
+    int VOICE_CLONE_NAME_NOT_NULL = 10181; // 音色克隆名称不能为空
+    int VOICE_CLONE_AUDIO_NOT_FOUND = 10182; // 音色克隆音频不存在
+
+    // 智能体模板相关错误码(补充)
+    int AGENT_TEMPLATE_NOT_FOUND = 10183; // 默认智能体未找到
+
+    // 知识库适配器相关错误码
+    int RAG_ADAPTER_TYPE_NOT_SUPPORTED = 10184; // 不支持的适配器类型
+    int RAG_CONFIG_VALIDATION_FAILED = 10185; // RAG配置验证失败
+    int RAG_ADAPTER_CREATION_FAILED = 10186; // 适配器创建失败
+    int RAG_ADAPTER_INIT_FAILED = 10187; // 适配器初始化失败
+    int RAG_ADAPTER_CONNECTION_FAILED = 10188; // 适配器连接测试失败
+    int RAG_ADAPTER_OPERATION_FAILED = 10189; // 适配器操作失败
+    int RAG_ADAPTER_NOT_FOUND = 10190; // 适配器未找到
+    int RAG_ADAPTER_CACHE_ERROR = 10191; // 适配器缓存错误
+    int RAG_ADAPTER_TYPE_NOT_FOUND = 10192; // 适配器类型未找到
+
 }

@@ -9,7 +9,6 @@ import asyncio
 import traceback
 import threading
 import opuslib_next
-import concurrent.futures
 from abc import ABC, abstractmethod
 from config.logger import setup_logging
 from typing import Optional, Tuple, List
@@ -53,121 +52,89 @@ class ASRProviderBase(ABC):
 
     # Receive audio
     async def receive_audio(self, conn, audio, audio_have_voice):
-        if conn.client_listen_mode == "auto" or conn.client_listen_mode == "realtime":
-            have_voice = audio_have_voice
+        if conn.client_listen_mode == "manual":
+            # 手动模式：缓存音频用于ASR识别
+            conn.asr_audio.append(audio)
         else:
-            have_voice = conn.client_have_voice
-        
-        conn.asr_audio.append(audio)
-        if not have_voice and not conn.client_have_voice:
-            conn.asr_audio = conn.asr_audio[-10:]
-            return
+            # 自动/实时模式：使用VAD检测
+            have_voice = audio_have_voice
 
-        if conn.client_voice_stop:
-            asr_audio_task = conn.asr_audio.copy()
-            conn.asr_audio.clear()
-            conn.reset_vad_states()
+            conn.asr_audio.append(audio)
+            if not have_voice and not conn.client_have_voice:
+                conn.asr_audio = conn.asr_audio[-10:]
+                return
 
-            if len(asr_audio_task) > 15 or conn.client_listen_mode == "manual":
-                await self.handle_voice_stop(conn, asr_audio_task)
+            # 自动模式下通过VAD检测到语音停止时触发识别
+            if conn.client_voice_stop:
+                asr_audio_task = conn.asr_audio.copy()
+                conn.asr_audio.clear()
+                conn.reset_vad_states()
+
+                if len(asr_audio_task) > 15:
+                    await self.handle_voice_stop(conn, asr_audio_task)
 
     # Handle voice stop
     async def handle_voice_stop(self, conn, asr_audio_task: List[bytes]):
         """Process ASR and voiceprint identification in parallel"""
         try:
             total_start_time = time.monotonic()
-            
+
             # Prepare audio data
             if conn.audio_format == "pcm":
                 pcm_data = asr_audio_task
             else:
                 pcm_data = self.decode_opus(asr_audio_task)
-            
+
             combined_pcm_data = b"".join(pcm_data)
-            
+
             # Prepare WAV data
             wav_data = None
             if conn.voiceprint_provider and combined_pcm_data:
                 wav_data = self._pcm_to_wav(combined_pcm_data)
-            
+
             # Define ASR task
-            def run_asr():
-                start_time = time.monotonic()
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        result = loop.run_until_complete(
-                            self.speech_to_text(asr_audio_task, conn.session_id, conn.audio_format)
-                        )
-                        end_time = time.monotonic()
-                        logger.bind(tag=TAG).info(f"ASR time: {end_time - start_time:.3f}s")
-                        return result
-                    finally:
-                        loop.close()
-                except Exception as e:
-                    end_time = time.monotonic()
-                    logger.bind(tag=TAG).error(f"ASR failed: {e}")
-                    return ("", None)
-            
-            # Define voiceprint identification task
-            def run_voiceprint():
-                if not wav_data:
-                    return None
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        # Use the voiceprint identification provider connected
-                        result = loop.run_until_complete(
-                            conn.voiceprint_provider.identify_speaker(wav_data, conn.session_id)
-                        )
-                        return result
-                    finally:
-                        loop.close()
-                except Exception as e:
-                    logger.bind(tag=TAG).error(f"Voiceprint identification failed: {e}")
-                    return None
-            
-            # 使用线程池执行器并行运行
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as thread_executor:
-                asr_future = thread_executor.submit(run_asr)
-                
-                if conn.voiceprint_provider and wav_data:
-                    voiceprint_future = thread_executor.submit(run_voiceprint)
-                    
-                    # Wait for both threads to complete
-                    asr_result = asr_future.result(timeout=15)
-                    voiceprint_result = voiceprint_future.result(timeout=15)
-                    
-                    results = {"asr": asr_result, "voiceprint": voiceprint_result}
-                else:
-                    asr_result = asr_future.result(timeout=15)
-                    results = {"asr": asr_result, "voiceprint": None}
-            
-            
-            # Process results
-            raw_text, _ = results.get("asr", ("", None))
-            speaker_name = results.get("voiceprint", None)
-            
-            # Record recognition results
+            asr_task = self.speech_to_text(asr_audio_task, conn.session_id, conn.audio_format)
+
+            if conn.voiceprint_provider and wav_data:
+                voiceprint_task = conn.voiceprint_provider.identify_speaker(wav_data, conn.session_id)
+                # Concurrent wait for two results
+                asr_result, voiceprint_result = await asyncio.gather(
+                    asr_task, voiceprint_task, return_exceptions=True
+                )
+            else:
+                asr_result = await asr_task
+                voiceprint_result = None
+
+            # Record recognition result - check if it is an exception
+            if isinstance(asr_result, Exception):
+                logger.bind(tag=TAG).error(f"ASR识别失败: {asr_result}")
+                raw_text = ""
+            else:
+                raw_text, _ = asr_result
+
+            if isinstance(voiceprint_result, Exception):
+                logger.bind(tag=TAG).error(f"声纹识别失败: {voiceprint_result}")
+                speaker_name = ""
+            else:
+                speaker_name = voiceprint_result
+
             if raw_text:
                 logger.bind(tag=TAG).info(f"Recognized text: {raw_text}")
             if speaker_name:
                 logger.bind(tag=TAG).info(f"Recognized speaker: {speaker_name}")
-            
+
             # Performance monitoring
             total_time = time.monotonic() - total_start_time
-            logger.bind(tag=TAG).info(f"Total processing time: {total_time:.3f}s")
-            
+            logger.bind(tag=TAG).debug(f"总处理耗时: {total_time:.3f}s")
+
             # Check text length
             text_len, _ = remove_punctuation_and_length(raw_text)
             self.stop_ws_connection()
-            
+
             if text_len > 0:
                 # Build JSON string containing speaker information
                 enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
-                
+
                 # Use custom module to report
                 await startToChat(conn, enhanced_text)
                 enqueue_asr_report(conn, enhanced_text, asr_audio_task)
@@ -241,6 +208,7 @@ class ASRProviderBase(ABC):
     @staticmethod
     def decode_opus(opus_data: List[bytes]) -> List[bytes]:
         """Decode Opus audio data to PCM data"""
+        decoder = None
         try:
             decoder = opuslib_next.Decoder(16000, 1)
             pcm_data = []
@@ -265,3 +233,9 @@ class ASRProviderBase(ABC):
         except Exception as e:
             logger.bind(tag=TAG).error(f"Audio decoding process error: {e}")
             return []
+        finally:
+            if decoder is not None:
+                try:
+                    del decoder
+                except Exception as e:
+                    logger.bind(tag=TAG).debug(f"Error releasing decoder resource: {e}")
