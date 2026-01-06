@@ -141,7 +141,7 @@ async def check_bind_device(conn):
         await send_stt_message(conn, text)
 
         # Play notification sound
-        music_path = "config/assets/bind_code.wav"
+        music_path = "config/assets/bind_code_vi.mp3"
         opus_packets = await audio_to_data(music_path)
         conn.tts.tts_audio_queue.put((SentenceType.FIRST, opus_packets, text))
 
@@ -149,7 +149,7 @@ async def check_bind_device(conn):
         for i in range(6):  # Ensure only 6 digits are played
             try:
                 digit = conn.bind_code[i]
-                num_path = f"config/assets/bind_code/{digit}.wav"
+                num_path = f"config/assets/bind_code/vi/{digit}.mp3"
                 num_packets = await audio_to_data(num_path)
                 conn.tts.tts_audio_queue.put((SentenceType.MIDDLE, num_packets, None))
             except Exception as e:
