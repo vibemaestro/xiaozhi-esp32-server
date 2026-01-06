@@ -4,6 +4,7 @@ from openai.types import CompletionUsage
 from config.logger import setup_logging
 from core.utils.util import check_model_key
 from core.providers.llm.base import LLMProviderBase
+from typing import Dict, Any
 
 TAG = __name__
 logger = setup_logging()
@@ -39,7 +40,7 @@ class LLMProvider(LLMProviderBase):
                 setattr(self, param, None)
 
         logger.debug(
-            f"意图识别参数初始化: {self.temperature}, {self.max_tokens}, {self.top_p}, {self.frequency_penalty}"
+            f"Intent recognition parameter initialization: {self.temperature}, {self.max_tokens}, {self.top_p}"
         )
 
         model_key_msg = check_model_key("LLM", self.api_key)
@@ -48,8 +49,40 @@ class LLMProvider(LLMProviderBase):
         self.client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=httpx.Timeout(self.timeout))
 
     @staticmethod
+    def _is_unsupported_error(err: Exception) -> bool:
+        msg = str(err).lower()
+        return (
+            "unsupported" in msg
+            or "does not support" in msg
+            or "not supported" in msg
+        )
+
+    def _strip_optional(self, params: Dict[str, Any], optional_keys) -> Dict[str, Any]:
+        """Return a copy with unsupported/optional keys removed."""
+        cleaned = dict(params)
+        for k in optional_keys:
+            cleaned.pop(k, None)
+        return cleaned
+
+    def _create_chat_completion(self, request_params: Dict[str, Any], optional_keys) -> Any:
+        """
+        Call OpenAI API with graceful downgrade when model rejects some params.
+        First try with all provided params; on 'unsupported' errors, retry without optional keys.
+        """
+        try:
+            return self.client.chat.completions.create(**request_params)
+        except Exception as e:
+            if self._is_unsupported_error(e) and optional_keys:
+                logger.bind(tag=TAG).warning(
+                    f"Model rejected some params, retrying without optional params. Error: {e}"
+                )
+                stripped = self._strip_optional(request_params, optional_keys)
+                return self.client.chat.completions.create(**stripped)
+            raise
+
+    @staticmethod
     def normalize_dialogue(dialogue):
-        """自动修复 dialogue 中缺失 content 的消息"""
+        """Automatically fix messages with missing content in dialogue"""
         for msg in dialogue:
             if "role" in msg and "content" not in msg:
                 msg["content"] = ""
@@ -65,7 +98,7 @@ class LLMProvider(LLMProviderBase):
                 "stream": True,
             }
 
-            # 添加可选参数,只有当参数不为None时才添加
+            # Add optional parameters, only add when parameter is not None
             optional_params = {
                 "max_tokens": kwargs.get("max_tokens", self.max_tokens),
                 "temperature": kwargs.get("temperature", self.temperature),
@@ -73,11 +106,13 @@ class LLMProvider(LLMProviderBase):
                 "frequency_penalty": kwargs.get("frequency_penalty", self.frequency_penalty),
             }
 
+            optional_keys_present = []
             for key, value in optional_params.items():
                 if value is not None:
                     request_params[key] = value
+                    optional_keys_present.append(key)
 
-            responses = self.client.chat.completions.create(**request_params)
+            responses = self._create_chat_completion(request_params, optional_keys_present)
 
             is_active = True
             for chunk in responses:
@@ -111,17 +146,19 @@ class LLMProvider(LLMProviderBase):
             }
 
             optional_params = {
-                "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+                "max_completion_tokens": kwargs.get("max_tokens", self.max_tokens),
                 "temperature": kwargs.get("temperature", self.temperature),
                 "top_p": kwargs.get("top_p", self.top_p),
                 "frequency_penalty": kwargs.get("frequency_penalty", self.frequency_penalty),
             }
 
+            optional_keys_present = []
             for key, value in optional_params.items():
                 if value is not None:
                     request_params[key] = value
+                    optional_keys_present.append(key)
 
-            stream = self.client.chat.completions.create(**request_params)
+            stream = self._create_chat_completion(request_params, optional_keys_present)
 
             for chunk in stream:
                 if getattr(chunk, "choices", None):
@@ -132,9 +169,9 @@ class LLMProvider(LLMProviderBase):
                 elif isinstance(getattr(chunk, "usage", None), CompletionUsage):
                     usage_info = getattr(chunk, "usage", None)
                     logger.bind(tag=TAG).info(
-                        f"Token 消耗：输入 {getattr(usage_info, 'prompt_tokens', '未知')}，"
-                        f"输出 {getattr(usage_info, 'completion_tokens', '未知')}，"
-                        f"共计 {getattr(usage_info, 'total_tokens', '未知')}"
+                        f"Token consumption: input {getattr(usage_info, 'prompt_tokens', 'Unknown')},"
+                        f"output {getattr(usage_info, 'completion_tokens', 'Unknown')},"
+                        f"total {getattr(usage_info, 'total_tokens', 'Unknown')}"
                     )
 
         except Exception as e:
