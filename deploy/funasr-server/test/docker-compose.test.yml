@@ -1,0 +1,17 @@
+services:
+  asr-tester:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: funasr-nano-vn-tester
+    volumes:
+      # Map toàn bộ folder tests vào container
+      # Giúp bạn sửa script ở máy host và chạy lại ngay lập tức mà không cần build lại image
+      - .:/workspace/test
+    environment:
+      - SAMPLE_FILE=/workspace/test/samples/sample_vi.wav
+    # Giữ container sống để bạn có thể exec vào chạy nhiều script khác nhau
+    tty: true
+    stdin_open: true
+    # Mạng: Nếu chạy cùng host dùng 'bridge', nếu chạy Swarm dùng overlay network của bạn
+    network_mode: "host"

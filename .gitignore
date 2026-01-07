@@ -185,3 +185,7 @@ uploadfile
 !main/manager-mobile/**/.env*
 !main/manager-mobile/**/*.json
 !main/xiaozhi-server/**/*.json
+
+deploy/funasr-server/models
+deploy/funasr-server/modelscope_cache
+deploy/funasr-server/ssl

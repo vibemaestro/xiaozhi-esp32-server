@@ -12,6 +12,7 @@ from funasr import AutoModel
 from funasr.utils.postprocess_utils import rich_transcription_postprocess
 from core.providers.asr.base import ASRProviderBase
 from core.providers.asr.dto.dto import InterfaceType
+from funasr.models.fun_asr_nano.model import FunASRNano
 
 TAG = __name__
 logger = setup_logging()
@@ -56,7 +57,8 @@ class ASRProvider(ASRProviderBase):
         os.makedirs(self.output_dir, exist_ok=True)
         with CaptureOutput():
             self.model = AutoModel(
-                model=self.model_dir,
+                model="models/asr/Fun-ASR-MLT-Nano-2512",
+                remote_code="models/funasr-nano/model.py",
                 vad_kwargs={"max_single_segment_time": 30000},
                 disable_update=True,
                 hub="hf",
@@ -98,7 +100,7 @@ class ASRProvider(ASRProviderBase):
                     self.model.generate,
                     input=combined_pcm_data,
                     cache={},
-                    language="auto",
+                    language="vi",
                     use_itn=True,
                     batch_size_s=60,
                 )

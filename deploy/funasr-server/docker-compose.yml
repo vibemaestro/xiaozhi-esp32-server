@@ -1,0 +1,19 @@
+services:
+  asr-native:
+    build: .
+    image: thanhlcm90/funasr-nano-vn:latest
+    container_name: funasr-nano-vn
+    volumes:
+      # Map model từ host vào đúng cache folder của ModelScope trong container
+      # - ./models/FunAudioLLM/Fun-ASR-MLT-Nano-2512:/root/.cache/modelscope/hub/models/FunAudioLLM/Fun-ASR-MLT-Nano-2512
+      - ./modelscope_cache:/root/.cache/modelscope
+      - ./models/FunAudioLLM/Fun-ASR-MLT-Nano-2512:/workspace/model_files
+      - ./scripts/funasr_wss_server.py:/workspace/FunASR/server.py
+      - ./ssl:/workspace/ssl
+    ports:
+      - "10095:10095"
+    environment:
+      - DOCKER_BUILDKIT=1
+      - OMP_NUM_THREADS=4
+    restart: always
+    

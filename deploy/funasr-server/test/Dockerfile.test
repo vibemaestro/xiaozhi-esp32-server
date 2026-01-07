@@ -1,0 +1,17 @@
+FROM python:3.10-slim
+
+WORKDIR /workspace/test
+
+# 1. Cài đặt system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg git gcc g++ portaudio19-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cài đặt thư viện test
+RUN pip install --no-cache-dir websocket-client pyaudio
+
+# Thiết lập đường dẫn để Python tìm thấy các script dễ dàng
+ENV PYTHONPATH=/workspace/test/scripts
+
+# Không copy code vào image để tận dụng Volume map (tiện cho việc sửa script)
+CMD ["python", "scripts/test_file.py"]
