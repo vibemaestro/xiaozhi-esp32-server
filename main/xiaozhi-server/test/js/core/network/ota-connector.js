@@ -11,14 +11,14 @@ export async function webSocketConnect(otaUrl, config) {
     // 发送OTA请求并获取返回的websocket信息
     const otaResult = await sendOTA(otaUrl, config);
     if (!otaResult) {
-        log('无法从OTA服务器获取信息', 'error');
+        log('Cannot get information from OTA server', 'error');
         return;
     }
 
     // 从OTA响应中提取websocket信息
     const { websocket } = otaResult;
     if (!websocket || !websocket.url) {
-        log('OTA响应中缺少websocket信息', 'error');
+        log('WebSocket information is missing in OTA response', 'error');
         return;
     }
 
@@ -40,7 +40,7 @@ export async function webSocketConnect(otaUrl, config) {
 
     const wsurl = connUrl.toString()
 
-    log(`正在连接: ${wsurl}`, 'info');
+    log(`Connecting: ${wsurl}`, 'info');
 
     if (wsurl) {
         document.getElementById('serverUrl').value = wsurl;
@@ -52,11 +52,11 @@ export async function webSocketConnect(otaUrl, config) {
 // 验证配置
 function validateConfig(config) {
     if (!config.deviceMac) {
-        log('设备MAC地址不能为空', 'error');
+        log('Device MAC address cannot be empty', 'error');
         return false;
     }
     if (!config.clientId) {
-        log('客户端ID不能为空', 'error');
+        log('Client ID cannot be empty', 'error');
         return false;
     }
     return true;
@@ -67,7 +67,7 @@ function validateWsUrl(wsUrl) {
     if (wsUrl === '') return false;
     // 检查URL格式
     if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
-        log('URL格式错误，必须以ws://或wss://开头', 'error');
+        log('URL format error, must start with ws:// or wss://', 'error');
         return false;
     }
     return true

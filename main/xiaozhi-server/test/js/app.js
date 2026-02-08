@@ -14,33 +14,33 @@ class App {
 
     // 初始化应用
     async init() {
-        log('正在初始化应用...', 'info');
+        log('Initializing application...', 'info');
 
-        // 初始化UI控制器
+        // Initialize UI controller
         this.uiController = getUIController();
         this.uiController.init();
 
-        // 检查Opus库
+        // Check Opus library
         checkOpusLoaded();
 
-        // 初始化Opus编码器
+        // Initialize Opus encoder
         initOpusEncoder();
 
-        // 初始化音频播放器
+        // Initialize audio player
         this.audioPlayer = getAudioPlayer();
         await this.audioPlayer.start();
 
-        // 初始化MCP工具
+        // Initialize MCP tools
         initMcpTools();
 
-        log('应用初始化完成', 'success');
+        log('Application initialized successfully', 'success');
     }
 }
 
-// 创建并启动应用
+// Create and start application
 const app = new App();
 
-// DOM加载完成后初始化
+// Initialize after DOM loading
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => app.init());
 } else {

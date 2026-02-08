@@ -81,15 +81,15 @@ export class StreamingContext {
 
     // 清空所有音频缓冲
     clearAllBuffers() {
-        log('清空所有音频缓冲', 'info');
+        log('Clear all audio buffers', 'info');
 
-        // 清空所有队列（使用clear方法保持对象引用）
+        // Clear all queues (using clear method to keep object reference)
         this.audioBufferQueue.clear();
         this.pendingAudioBufferQueue = [];
         this.activeQueue.clear();
         this.queue = [];
 
-        // 停止当前播放的音频源
+        // Stop current audio source
         if (this.source) {
             try {
                 this.source.stop();
@@ -105,16 +105,16 @@ export class StreamingContext {
         this.scheduledEndTime = this.audioContext.currentTime;
         this.totalSamples = 0;
 
-        log('音频缓冲已清空', 'success');
+        log('Audio buffers cleared', 'success');
     }
 
     // 将Opus数据解码为PCM
     async decodeOpusFrames() {
         if (!this.opusDecoder) {
-            log('Opus解码器未初始化，无法解码', 'error');
+            log('Opus decoder not initialized, cannot decode', 'error');
             return;
         } else {
-            log('Opus解码器启动', 'info');
+            log('Opus decoder started', 'info');
         }
 
         while (true) {
@@ -132,7 +132,7 @@ export class StreamingContext {
                         }
                     }
                 } catch (error) {
-                    log("Opus解码失败: " + error.message, 'error');
+                    log("Opus decoding failed: " + error.message, 'error');
                 }
             }
 
@@ -143,7 +143,7 @@ export class StreamingContext {
                 }
                 this.totalSamples += decodedSamples.length;
             } else {
-                log('没有成功解码的样本', 'warning');
+                log('No successfully decoded samples', 'warning');
             }
             await this.getPendingAudioBufferQueue();
         }
@@ -185,7 +185,7 @@ export class StreamingContext {
                 // 直接连接到输出
                 this.source.connect(this.audioContext.destination);
 
-                log(`调度播放 ${currentSamples.length} 个样本，约 ${(currentSamples.length / this.sampleRate).toFixed(2)} 秒`, 'debug');
+                log(`Schedule playback ${currentSamples.length} samples, approximately ${(currentSamples.length / this.sampleRate).toFixed(2)} seconds`, 'debug');
                 this.source.start(startTime);
 
                 // 更新下一个音频块的调度时间

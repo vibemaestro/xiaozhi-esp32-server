@@ -1,9 +1,9 @@
-// 音频录制模块
+// Audio recorder module
 import { log } from '../../utils/logger.js';
 import { initOpusEncoder } from './opus-codec.js';
 import { getAudioPlayer } from './player.js';
 
-// 音频录制器类
+// Audio recorder class
 export class AudioRecorder {
     constructor() {
         this.isRecording = false;
@@ -20,24 +20,24 @@ export class AudioRecorder {
         this.recordingTimer = null;
         this.websocket = null;
 
-        // 回调函数
+        // Callback functions
         this.onRecordingStart = null;
         this.onRecordingStop = null;
         this.onVisualizerUpdate = null;
     }
 
-    // 设置WebSocket实例
+    // Set WebSocket instance
     setWebSocket(ws) {
         this.websocket = ws;
     }
 
-    // 获取AudioContext实例
+    // Get AudioContext instance
     getAudioContext() {
         const audioPlayer = getAudioPlayer();
         return audioPlayer.getAudioContext();
     }
 
-    // 初始化编码器
+    // Initialize encoder
     initEncoder() {
         if (!this.opusEncoder) {
             this.opusEncoder = initOpusEncoder();
@@ -45,7 +45,7 @@ export class AudioRecorder {
         return this.opusEncoder;
     }
 
-    // PCM处理器代码
+    // PCM processor code
     getAudioProcessorCode() {
         return `
             class AudioRecorderProcessor extends AudioWorkletProcessor {
@@ -104,7 +104,7 @@ export class AudioRecorder {
         `;
     }
 
-    // 创建音频处理器
+    // Create audio processor
     async createAudioProcessor() {
         this.audioContext = this.getAudioContext();
 
@@ -123,7 +123,7 @@ export class AudioRecorder {
                     }
                 };
 
-                log('使用AudioWorklet处理音频', 'success');
+                log('Use AudioWorklet to process audio', 'success');
 
                 const silent = this.audioContext.createGain();
                 silent.gain.value = 0;
@@ -131,16 +131,16 @@ export class AudioRecorder {
                 silent.connect(this.audioContext.destination);
                 return { node: audioProcessor, type: 'worklet' };
             } else {
-                log('AudioWorklet不可用，使用ScriptProcessorNode作为回退方案', 'warning');
+                log('AudioWorklet is not available, use ScriptProcessorNode as fallback solution', 'warning');
                 return this.createScriptProcessor();
             }
         } catch (error) {
-            log(`创建音频处理器失败: ${error.message}，尝试回退方案`, 'error');
+            log(`Create audio processor failed: ${error.message}, try fallback solution`, 'error');
             return this.createScriptProcessor();
         }
     }
 
-    // 创建ScriptProcessor作为回退
+    // Create ScriptProcessor as fallback
     createScriptProcessor() {
         try {
             const frameSize = 4096;
@@ -164,15 +164,15 @@ export class AudioRecorder {
             scriptProcessor.connect(silent);
             silent.connect(this.audioContext.destination);
 
-            log('使用ScriptProcessorNode作为回退方案成功', 'warning');
+            log('Use ScriptProcessorNode as fallback solution successfully', 'warning');
             return { node: scriptProcessor, type: 'processor' };
         } catch (fallbackError) {
-            log(`回退方案也失败: ${fallbackError.message}`, 'error');
+            log(`Fallback solution also failed: ${fallbackError.message}`, 'error');
             return null;
         }
     }
 
-    // 处理PCM缓冲数据
+    // Process PCM buffer data
     processPCMBuffer(buffer) {
         if (!this.isRecording) return;
 
@@ -191,10 +191,10 @@ export class AudioRecorder {
         }
     }
 
-    // 编码并发送Opus数据
+    // Encode and send Opus data
     encodeAndSendOpus(pcmData = null) {
         if (!this.opusEncoder) {
-            log('Opus编码器未初始化', 'error');
+            log('Opus encoder not initialized', 'error');
             return;
         }
 
@@ -209,13 +209,13 @@ export class AudioRecorder {
                     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                         try {
                             this.websocket.send(opusData.buffer);
-                            log(`发送Opus帧，大小：${opusData.length}字节`, 'debug');
+                            log(`Send Opus frame, size: ${opusData.length} bytes`, 'debug');
                         } catch (error) {
-                            log(`WebSocket发送错误: ${error.message}`, 'error');
+                            log(`WebSocket send error: ${error.message}`, 'error');
                         }
                     }
                 } else {
-                    log('Opus编码失败，无有效数据返回', 'error');
+                    log('Opus encoding failed, no valid data returned', 'error');
                 }
             } else {
                 if (this.pcmDataBuffer.length > 0) {
@@ -231,20 +231,20 @@ export class AudioRecorder {
                 }
             }
         } catch (error) {
-            log(`Opus编码错误: ${error.message}`, 'error');
+            log(`Opus encoding error: ${error.message}`, 'error');
         }
     }
 
-    // 开始录音
+    // Start recording
     async start() {
         if (this.isRecording) return false;
 
         try {
-            // 检查是否有WebSocketHandler实例
+            // Check if there is a WebSocketHandler instance
             const { getWebSocketHandler } = await import('../network/websocket.js');
             const wsHandler = getWebSocketHandler();
 
-            // 如果机器正在说话，发送打断消息
+            // If the machine is speaking, send an abort message
             if (wsHandler && wsHandler.isRemoteSpeaking && wsHandler.currentSessionId) {
                 const abortMessage = {
                     session_id: wsHandler.currentSessionId,
@@ -254,16 +254,16 @@ export class AudioRecorder {
 
                 if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                     this.websocket.send(JSON.stringify(abortMessage));
-                    log('发送打断消息', 'info');
+                    log('Send abort message', 'info');
                 }
             }
 
             if (!this.initEncoder()) {
-                log('无法启动录音: Opus编码器初始化失败', 'error');
+                log('Cannot start recording: Opus encoder initialization failed', 'error');
                 return false;
             }
 
-            log('请至少录制1-2秒钟的音频，确保采集到足够数据', 'info');
+            log('Please record at least 1-2 seconds of audio, ensure enough data is collected', 'info');
 
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
@@ -282,7 +282,7 @@ export class AudioRecorder {
 
             const processorResult = await this.createAudioProcessor();
             if (!processorResult) {
-                log('无法创建音频处理器', 'error');
+                log('Cannot create audio processor', 'error');
                 return false;
             }
 
@@ -305,7 +305,7 @@ export class AudioRecorder {
                 this.audioProcessor.port.postMessage({ command: 'start' });
             }
 
-            // 发送监听开始消息
+            // Send listen start message
             if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                 const listenMessage = {
                     type: 'listen',
@@ -313,20 +313,20 @@ export class AudioRecorder {
                     state: 'start'
                 };
 
-                log(`发送录音开始消息: ${JSON.stringify(listenMessage)}`, 'info');
+                log(`Send recording start message: ${JSON.stringify(listenMessage)}`, 'info');
                 this.websocket.send(JSON.stringify(listenMessage));
             } else {
-                log('WebSocket未连接，无法发送开始消息', 'error');
+                log('WebSocket not connected, cannot send start message', 'error');
                 return false;
             }
 
-            // 开始可视化
+            // Start visualization
             if (this.onVisualizerUpdate) {
                 const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
                 this.startVisualization(dataArray);
             }
 
-            // 启动录音计时器
+            // Start recording timer
             let recordingSeconds = 0;
             this.recordingTimer = setInterval(() => {
                 recordingSeconds += 0.1;
@@ -335,16 +335,16 @@ export class AudioRecorder {
                 }
             }, 100);
 
-            log('开始PCM直接录音', 'success');
+            log('Start PCM direct recording', 'success');
             return true;
         } catch (error) {
-            log(`直接录音启动错误: ${error.message}`, 'error');
+            log(`Direct recording start error: ${error.message}`, 'error');
             this.isRecording = false;
             return false;
         }
     }
 
-    // 开始可视化
+    // Start visualization
     startVisualization(dataArray) {
         const draw = () => {
             this.visualizationRequest = requestAnimationFrame(() => draw());
@@ -360,7 +360,7 @@ export class AudioRecorder {
         draw();
     }
 
-    // 停止录音
+    // Stop recording
     stop() {
         if (!this.isRecording) return false;
 
@@ -391,10 +391,10 @@ export class AudioRecorder {
                 this.recordingTimer = null;
             }
 
-            // 编码并发送剩余的数据
+            // Encode and send remaining data
             this.encodeAndSendOpus();
 
-            // 发送结束信号
+            // Send end signal
             if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                 const emptyOpusFrame = new Uint8Array(0);
                 this.websocket.send(emptyOpusFrame);
@@ -406,28 +406,28 @@ export class AudioRecorder {
                 };
 
                 this.websocket.send(JSON.stringify(stopMessage));
-                log('已发送录音停止信号', 'info');
+                log('Send recording stop signal', 'info');
             }
 
             if (this.onRecordingStop) {
                 this.onRecordingStop();
             }
 
-            log('停止PCM直接录音', 'success');
+            log('Stop PCM direct recording', 'success');
             return true;
         } catch (error) {
-            log(`直接录音停止错误: ${error.message}`, 'error');
+            log(`Direct recording stop error: ${error.message}`, 'error');
             return false;
         }
     }
 
-    // 获取分析器
+    // Get analyser
     getAnalyser() {
         return this.analyser;
     }
 }
 
-// 创建单例
+// Create singleton
 let audioRecorderInstance = null;
 
 export function getAudioRecorder() {
