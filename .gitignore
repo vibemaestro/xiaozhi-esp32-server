@@ -154,6 +154,7 @@ main/manager-web/node_modules
 .env.development
 
 # model files
+main/xiaozhi-server/models/piper/*
 main/xiaozhi-server/models/SenseVoiceSmall/model.pt
 main/xiaozhi-server/models/sherpa-onnx*
 /main/xiaozhi-server/audio_ref/
@@ -183,3 +184,4 @@ uploadfile
 !main/manager-mobile/**/env/
 !main/manager-mobile/**/.env*
 !main/manager-mobile/**/*.json
+!main/xiaozhi-server/**/*.json

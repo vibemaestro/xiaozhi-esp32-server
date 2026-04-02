@@ -1,0 +1,25 @@
+# If you only want to install xiaozhi-server in a lightweight way, using only the local configuration file, you don't need to care about this file and don't need to change anything in this file.
+# If you want to get the configuration from manager-api, please read below:
+# Please copy this file to the xiaozhi-server/data directory. If there is no data directory, please create one, and name the copied file .config.yaml
+# Note: If there is already a .config.yaml file in the data directory, please delete it first.
+# First, start manager-api and manager-web, and register an account. The first registered account is the administrator.
+# Use the administrator account to enter the [Parameter Management] page, find [server.secret], and copy it to the parameter value. Note that every time you deploy from scratch, server.secret will change.
+# Open the .config.yaml file in the data directory and set manager-api.secret to the server.secret you just copied.
+server:
+  ip: 0.0.0.0
+  port: 8000
+  # The http service port, used for the visual analysis interface
+  http_port: 8003
+  # Visual analysis interface address
+  # The interface address for visual analysis sent to the device
+  # If you use the default configuration below, the system will automatically generate the visual recognition address and print it in the startup log. You can directly check this address in your browser.
+  # When deploying with Docker or using a public network (with SSL, domain names), this address may not be accurate.
+  # Therefore, when deploying with Docker, set vision_explain to the LAN address.
+  # If deploying on a public network, set vision_explain to the public address.
+  vision_explain: http://your_ip_or_domain:port/mcp/vision/explain
+manager-api:
+  # The address of your manager-api. It's best to use a LAN IP.
+  # If deploying with Docker, please set this to http://xiaozhi-esp32-server-web:8002/xiaozhi
+  url: http://127.0.0.1:8002/xiaozhi
+  # Your manager-api token, which is the server.secret you just copied
+  secret: your_server.secret_value

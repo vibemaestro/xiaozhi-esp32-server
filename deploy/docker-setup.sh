@@ -165,7 +165,7 @@ if check_installed; then
         # Download the latest config files
         check_and_download "/opt/xiaozhi-server/docker-compose_all.yml" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/deploy/docker-compose_all.yml"
         check_and_download "/opt/xiaozhi-server/nginx.conf" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/deploy/nginx.conf"
-        check_and_download "/opt/xiaozhi-server/data/.config.yaml" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/main/xiaozhi-server/config_from_api.yaml"
+        check_and_download "/opt/xiaozhi-server/data/.config.yaml" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/deploy/config_from_api.yaml"
         
         # Start Docker services
         echo "Starting the latest version of services..."
@@ -312,7 +312,7 @@ if [ ! -f "$MODEL_PATH" ]; then
         sleep 0.5
     done
     ) | whiptail --title "Downloading" --gauge "Downloading voice recognition model..." 10 60 0
-    curl -fL --progress-bar https://www.modelscope.cn/models/iic/speech_UniASR_asr_2pass-vi-16k-common-vocab1001-pytorch-online/resolve/master/model.pt -o "$MODEL_PATH" || {
+    curl -fL --progress-bar https://modelscope.cn/models/iic/SenseVoiceSmall/resolve/master/model.pt -o "$MODEL_PATH" || {
         whiptail --title "Error" --msgbox "Failed to download model.pt file" 10 50
         exit 1
     }
@@ -324,7 +324,7 @@ fi
 if [ -z "$UPGRADE_COMPLETED" ]; then
     check_and_download "/opt/xiaozhi-server/docker-compose_all.yml" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/deploy/docker-compose_all.yml"
     check_and_download "/opt/xiaozhi-server/nginx.conf" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/deploy/nginx.conf"
-    check_and_download "/opt/xiaozhi-server/data/.config.yaml" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/main/xiaozhi-server/config_from_api.yaml"
+    check_and_download "/opt/xiaozhi-server/data/.config.yaml" "https://ghfast.top/https://raw.githubusercontent.com/thanhlcm90/xiaozhi-esp32-server/refs/heads/main/deploy/config_from_api.yaml"
 fi
 
 # Start Docker services

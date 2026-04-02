@@ -24,23 +24,23 @@ class TTSProvider(TTSProviderBase):
         try:
             communicate = edge_tts.Communicate(text, voice=self.voice)
             if output_file:
-                # 确保目录存在并创建空文件
+                # Ensure the directory exists and create an empty file
                 os.makedirs(os.path.dirname(output_file), exist_ok=True)
                 with open(output_file, "wb") as f:
                     pass
 
-                # 流式写入音频数据
-                with open(output_file, "ab") as f:  # 改为追加模式避免覆盖
+                # Stream write audio data
+                with open(output_file, "ab") as f:  # Change to append mode to avoid overwriting
                     async for chunk in communicate.stream():
-                        if chunk["type"] == "audio":  # 只处理音频数据块
+                        if chunk["type"] == "audio":  # Only process audio data blocks
                             f.write(chunk["data"])
             else:
-                # 返回音频二进制数据
+                # Return audio binary data
                 audio_bytes = b""
                 async for chunk in communicate.stream():
                     if chunk["type"] == "audio":
                         audio_bytes += chunk["data"]
                 return audio_bytes
         except Exception as e:
-            error_msg = f"Edge TTS请求失败: {e}"
-            raise Exception(error_msg)  # 抛出异常，让调用方捕获
+            error_msg = f"Edge TTS request failed: {e}"
+            raise Exception(error_msg)  # Throw an exception, let the caller capture
