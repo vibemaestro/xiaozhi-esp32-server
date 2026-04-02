@@ -325,6 +325,17 @@ ASR:
     model_dir: models/sherpa-onnx-paraformer-zh-small-2024-03-09
     output_dir: tmp/
     model_type: paraformer
+  GipformerASR:
+    # Vietnamese ASR - Gipformer 65M RNNT model (auto-downloaded from HuggingFace)
+    # Repo: https://huggingface.co/g-group-ai-lab/gipformer-65M-rnnt
+    type: gipformer
+    # Precision: fp32 (full) or int8 (quantized, smaller & faster, default)
+    quantize: int8
+    output_dir: tmp/
+    # Number of inference threads
+    num_threads: 2
+    # Decoding method: greedy_search or modified_beam_search
+    decoding_method: greedy_search
   DoubaoASR:
     # Apply for related keys
     # https://console.volcengine.com/speech/app
