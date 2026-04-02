@@ -160,6 +160,9 @@ class TTSProvider(TTSProviderBase):
         try:
             max_repeat_time = 5
             text = MarkdownCleaner.clean_markdown(text)
+            logger.bind(tag=TAG).debug(
+                f"Piper to_tts_single_stream | is_last={is_last} | text_len={len(text)}"
+            )
             try:
                 asyncio.run(self.text_to_speak(text, is_last))
             except Exception as e:
@@ -191,18 +194,24 @@ class TTSProvider(TTSProviderBase):
             * 2  # 16-bit PCM data
         )
 
-        def _on_pcm_chunk(chunk: bytes):
-            if not chunk:
+        def _encode_and_send(chunk_pcm: bytes, src_rate: int):
+            if not chunk_pcm:
                 return
-            pcm_chunk = (
-                self._resample_pcm(chunk, self.sample_rate, self.opus_sample_rate)
-                if self.sample_rate != self.opus_sample_rate
-                else chunk
+            target_pcm = (
+                self._resample_pcm(chunk_pcm, src_rate, self.opus_sample_rate)
+                if src_rate != self.opus_sample_rate
+                else chunk_pcm
             )
-            self.pcm_buffer.extend(pcm_chunk)
+            self.pcm_buffer.extend(target_pcm)
+            logger.bind(tag=TAG).debug(
+                f"Piper recv PCM chunk | in_len={len(chunk_pcm)} | after_resample_len={len(target_pcm)} | buffer={len(self.pcm_buffer)} | src_rate={src_rate} -> {self.opus_sample_rate}"
+            )
             while len(self.pcm_buffer) >= frame_bytes:
                 frame = bytes(self.pcm_buffer[:frame_bytes])
                 del self.pcm_buffer[:frame_bytes]
+                logger.bind(tag=TAG).debug(
+                    f"Piper encode frame | frame_bytes={len(frame)} | buffer_left={len(self.pcm_buffer)}"
+                )
                 self.opus_encoder.encode_pcm_to_opus_stream(
                     frame,
                     end_of_stream=False,
@@ -216,17 +225,29 @@ class TTSProvider(TTSProviderBase):
                 )
                 self.pcm_buffer.clear()
                 self.tts_audio_queue.put((SentenceType.FIRST, [], text))
-                synth_kwargs = self._build_synth_kwargs(
-                    want_chunk=True,
-                    chunk_cb=_on_pcm_chunk,
-                    target_rate=self.opus_sample_rate,
+                synth_kwargs = self._build_synth_kwargs()
+                logger.bind(tag=TAG).debug(
+                    f"Piper synth kwargs (stream): {synth_kwargs}"
                 )
                 try:
-                    self.voice.synthesize(text, **synth_kwargs)
+                    chunk_count = 0
+                    for chunk in self.voice.synthesize(text, **synth_kwargs):
+                        chunk_count += 1
+                        # Prefer documented fields
+                        pcm_bytes = getattr(chunk, "audio_int16_bytes", None)
+                        if pcm_bytes is None and hasattr(chunk, "audio_int16"):
+                            pcm_bytes = chunk.audio_int16.tobytes()
+                        if pcm_bytes is None:
+                            # fallback: assume bytes
+                            pcm_bytes = bytes(chunk)
+                        chunk_sr = getattr(chunk, "sample_rate", self.sample_rate)
+                        if not chunk_sr:
+                            chunk_sr = self.sample_rate or self.opus_sample_rate
+                        _encode_and_send(pcm_bytes, chunk_sr)
+                    logger.bind(tag=TAG).debug(f"Piper synth chunks={chunk_count}")
                 except TypeError:
-                    # Fallback minimal call
                     pcm_data = self.voice.synthesize(text)
-                    _on_pcm_chunk(pcm_data)
+                    _encode_and_send(pcm_data, self.sample_rate or self.opus_sample_rate)
 
                 if self.pcm_buffer:
                     self.opus_encoder.encode_pcm_to_opus_stream(
@@ -238,6 +259,8 @@ class TTSProvider(TTSProviderBase):
 
                 if is_last:
                     self._process_before_stop_play_files()
+                    # notify end of audio to downstream
+                    self.tts_audio_queue.put((SentenceType.LAST, [], text))
                 logger.bind(tag=TAG).debug(
                     f"Piper synth finished | text_len={len(text)} | is_last={is_last}"
                 )
@@ -267,18 +290,31 @@ class TTSProvider(TTSProviderBase):
 
         try:
             synth_kwargs = self._build_synth_kwargs(
-                want_chunk=False,
-                chunk_cb=None,
-                target_rate=self.opus_sample_rate if self.sample_rate != self.opus_sample_rate else None,
+            )
+            logger.bind(tag=TAG).debug(
+                f"Piper synth kwargs (non-stream): {synth_kwargs}"
             )
             try:
-                pcm_data = self.voice.synthesize(text, **synth_kwargs)
+                pcm_chunks = []
+                src_rate = self.sample_rate
+                for chunk in self.voice.synthesize(text, **synth_kwargs):
+                    pcm_bytes = getattr(chunk, "audio_int16_bytes", None)
+                    if pcm_bytes is None and hasattr(chunk, "audio_int16"):
+                        pcm_bytes = chunk.audio_int16.tobytes()
+                    if pcm_bytes is None:
+                        pcm_bytes = bytes(chunk)
+                    chunk_sr = getattr(chunk, "sample_rate", self.sample_rate)
+                    if chunk_sr:
+                        src_rate = chunk_sr
+                    pcm_chunks.append(pcm_bytes)
+                pcm_data = b"".join(pcm_chunks)
             except TypeError:
                 pcm_data = self.voice.synthesize(text)
+                src_rate = self.sample_rate or self.opus_sample_rate
 
-            if self.sample_rate != self.opus_sample_rate:
+            if src_rate and src_rate != self.opus_sample_rate:
                 pcm_data = self._resample_pcm(
-                    pcm_data, self.sample_rate, self.opus_sample_rate
+                    pcm_data, src_rate, self.opus_sample_rate
                 )
 
             logger.info(
@@ -327,13 +363,10 @@ class TTSProvider(TTSProviderBase):
         resampled = np.interp(dst_idx, src_idx, pcm).astype(np.int16)
         return resampled.tobytes()
 
-    def _build_synth_kwargs(self, want_chunk: bool, chunk_cb, target_rate: Optional[int]):
+    def _build_synth_kwargs(self):
         """Build kwargs based on piper-tts signature for compatibility."""
         kwargs = {}
         params = getattr(self, "synth_params", set())
-
-        if want_chunk and chunk_cb and "audio_chunk_callback" in params:
-            kwargs["audio_chunk_callback"] = chunk_cb
 
         if "speaker_id" in params and self.speaker_id is not None:
             kwargs["speaker_id"] = self.speaker_id
@@ -349,7 +382,5 @@ class TTSProvider(TTSProviderBase):
             kwargs["phoneme_input"] = self.phoneme_input
         if "ssml" in params:
             kwargs["ssml"] = self.ssml
-        if target_rate and "output_sample_rate" in params:
-            kwargs["output_sample_rate"] = target_rate
 
         return kwargs

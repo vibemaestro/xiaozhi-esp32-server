@@ -4,7 +4,7 @@ from openai.types import CompletionUsage
 from config.logger import setup_logging
 from core.utils.util import check_model_key
 from core.providers.llm.base import LLMProviderBase
-from typing import Dict, Any
+from typing import Dict, Any, Set
 
 TAG = __name__
 logger = setup_logging()
@@ -20,6 +20,8 @@ class LLMProvider(LLMProviderBase):
             self.base_url = config.get("url")
         timeout = config.get("timeout", 300)
         self.timeout = int(timeout) if timeout else 300
+        # remember unsupported optional params per model to avoid retrying them
+        self._unsupported_by_model: Dict[str, Set[str]] = {}
 
         param_defaults = {
             "max_tokens": int,
@@ -64,18 +66,26 @@ class LLMProvider(LLMProviderBase):
             cleaned.pop(k, None)
         return cleaned
 
-    def _create_chat_completion(self, request_params: Dict[str, Any], optional_keys) -> Any:
+    def _create_chat_completion(self, request_params: Dict[str, Any], optional_keys, model_name: str) -> Any:
         """
-        Call OpenAI API with graceful downgrade when model rejects some params.
-        First try with all provided params; on 'unsupported' errors, retry without optional keys.
+        Call OpenAI API with graceful downgrade when optional params may be unsupported.
+        Strategy:
+        1) Strip previously-remembered unsupported params for this model before first call.
+        2) On any exception, retry once without optional params, and remember those params for this model.
         """
+        blocked = self._unsupported_by_model.get(model_name, set())
+        if blocked:
+            request_params = self._strip_optional(request_params, blocked)
+            optional_keys = [k for k in optional_keys if k not in blocked]
         try:
             return self.client.chat.completions.create(**request_params)
-        except Exception as e:
-            if self._is_unsupported_error(e) and optional_keys:
+        except Exception:
+            if optional_keys:
                 logger.bind(tag=TAG).warning(
-                    f"Model rejected some params, retrying without optional params. Error: {e}"
+                    f"Model={model_name} rejected optional params, retrying once without {optional_keys}."
                 )
+                # remember and retry once without optional keys
+                self._unsupported_by_model.setdefault(model_name, set()).update(optional_keys)
                 stripped = self._strip_optional(request_params, optional_keys)
                 return self.client.chat.completions.create(**stripped)
             raise
@@ -112,7 +122,7 @@ class LLMProvider(LLMProviderBase):
                     request_params[key] = value
                     optional_keys_present.append(key)
 
-            responses = self._create_chat_completion(request_params, optional_keys_present)
+            responses = self._create_chat_completion(request_params, optional_keys_present, self.model_name)
 
             is_active = True
             for chunk in responses:
@@ -158,7 +168,7 @@ class LLMProvider(LLMProviderBase):
                     request_params[key] = value
                     optional_keys_present.append(key)
 
-            stream = self._create_chat_completion(request_params, optional_keys_present)
+            stream = self._create_chat_completion(request_params, optional_keys_present, self.model_name)
 
             for chunk in stream:
                 if getattr(chunk, "choices", None):
