@@ -1,5 +1,5 @@
-import BlockingQueue from '../../utils/blocking-queue.js';
-import { log } from '../../utils/logger.js';
+import BlockingQueue from '../../utils/blocking-queue.js?v=0205';
+import { log } from '../../utils/logger.js?v=0205';
 
 // 音频流播放上下文类
 export class StreamingContext {
@@ -23,6 +23,10 @@ export class StreamingContext {
         this.totalSamples = 0;    // 累积的总样本数
         this.lastPlayTime = 0;    // 上次播放的时间戳
         this.scheduledEndTime = 0; // 已调度音频的结束时间
+
+        // 初始化分析器节点（供Live2D使用）
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 256;
     }
 
     // 缓存音频数组
@@ -81,15 +85,15 @@ export class StreamingContext {
 
     // 清空所有音频缓冲
     clearAllBuffers() {
-        log('Clear all audio buffers', 'info');
+        log('清空所有音频缓冲', 'info');
 
-        // Clear all queues (using clear method to keep object reference)
+        // 清空所有队列（使用clear方法保持对象引用）
         this.audioBufferQueue.clear();
         this.pendingAudioBufferQueue = [];
         this.activeQueue.clear();
         this.queue = [];
 
-        // Stop current audio source
+        // 停止当前播放的音频源
         if (this.source) {
             try {
                 this.source.stop();
@@ -105,16 +109,21 @@ export class StreamingContext {
         this.scheduledEndTime = this.audioContext.currentTime;
         this.totalSamples = 0;
 
-        log('Audio buffers cleared', 'success');
+        log('音频缓冲已清空', 'success');
+    }
+
+    // 获取分析器节点（供Live2D使用）
+    getAnalyser() {
+        return this.analyser;
     }
 
     // 将Opus数据解码为PCM
     async decodeOpusFrames() {
         if (!this.opusDecoder) {
-            log('Opus decoder not initialized, cannot decode', 'error');
+            log('Opus解码器未初始化，无法解码', 'error');
             return;
         } else {
-            log('Opus decoder started', 'info');
+            log('Opus解码器启动', 'info');
         }
 
         while (true) {
@@ -132,7 +141,7 @@ export class StreamingContext {
                         }
                     }
                 } catch (error) {
-                    log("Opus decoding failed: " + error.message, 'error');
+                    log("Opus解码失败: " + error.message, 'error');
                 }
             }
 
@@ -143,7 +152,7 @@ export class StreamingContext {
                 }
                 this.totalSamples += decodedSamples.length;
             } else {
-                log('No successfully decoded samples', 'warning');
+                log('没有成功解码的样本', 'warning');
             }
             await this.getPendingAudioBufferQueue();
         }
@@ -182,10 +191,11 @@ export class StreamingContext {
                 const currentTime = this.audioContext.currentTime;
                 const startTime = Math.max(this.scheduledEndTime, currentTime);
 
-                // 直接连接到输出
+                // 连接到分析器和输出
+                this.source.connect(this.analyser);
                 this.source.connect(this.audioContext.destination);
 
-                log(`Schedule playback ${currentSamples.length} samples, approximately ${(currentSamples.length / this.sampleRate).toFixed(2)} seconds`, 'debug');
+                log(`调度播放 ${currentSamples.length} 个样本，约 ${(currentSamples.length / this.sampleRate).toFixed(2)} 秒`, 'debug');
                 this.source.start(startTime);
 
                 // 更新下一个音频块的调度时间

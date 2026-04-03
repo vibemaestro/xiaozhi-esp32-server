@@ -3,6 +3,8 @@ import { loadConfig, saveConfig } from '../config/manager.js';
 import { getAudioPlayer } from '../core/audio/player.js';
 import { getAudioRecorder } from '../core/audio/recorder.js';
 import { getWebSocketHandler } from '../core/network/websocket.js';
+import { log } from '../utils/logger.js';
+import { otaStatusStyle, wssStatusStyle } from './dom-helper.js';
 
 // UI controller class
 export class UIController {
@@ -32,17 +34,6 @@ export class UIController {
         this.visualizerContext.fillRect(0, 0, this.visualizerCanvas.width, this.visualizerCanvas.height);
     }
 
-    // Update status display
-    updateStatusDisplay(element, text) {
-        element.textContent = text;
-        element.removeAttribute('style');
-        element.classList.remove('connected');
-        if (text.includes('Connected')) {
-            element.classList.add('connected');
-        }
-        console.log('Update status:', text, 'Class list:', element.className, 'Style attribute:', element.getAttribute('style'));
-    }
-
     // Update connection status UI
     updateConnectionUI(isConnected) {
         const connectionStatus = document.getElementById('connectionStatus');
@@ -53,15 +44,15 @@ export class UIController {
         const recordButton = document.getElementById('recordButton');
 
         if (isConnected) {
-            this.updateStatusDisplay(connectionStatus, '● WS Connected');
-            this.updateStatusDisplay(otaStatus, '● OTA Connected');
+            wssStatusStyle(true);
+            otaStatusStyle(true);
             connectButton.textContent = 'Disconnect';
             messageInput.disabled = false;
             sendTextButton.disabled = false;
             recordButton.disabled = false;
         } else {
-            this.updateStatusDisplay(connectionStatus, '● WS Not Connected');
-            this.updateStatusDisplay(otaStatus, '● OTA Not Connected');
+            wssStatusStyle(false);
+            otaStatusStyle(false);
             connectButton.textContent = 'Connect';
             messageInput.disabled = true;
             sendTextButton.disabled = true;
@@ -74,11 +65,12 @@ export class UIController {
     // Update recording button state
     updateRecordButtonState(isRecording, seconds = 0) {
         const recordButton = document.getElementById('recordButton');
-        if (isRecording) {
-            recordButton.textContent = `Stop recording ${seconds.toFixed(1)} seconds`;
+        const audioRecorder = getAudioRecorder();
+        if (isRecording || audioRecorder.isContinuousMode) {
+            recordButton.textContent = `Stop listen`;
             recordButton.classList.add('recording');
         } else {
-            recordButton.textContent = 'Start recording';
+            recordButton.textContent = 'Start listen';
             recordButton.classList.remove('recording');
         }
         recordButton.disabled = false;
@@ -238,6 +230,14 @@ export class UIController {
         audioRecorder.onRecordingStop = () => {
             this.updateRecordButtonState(false);
         };
+        
+        audioRecorder.onSpeechStart = () => {
+            log('Speech detected - started streaming', 'info');
+        };
+        
+        audioRecorder.onSpeechEnd = () => {
+            log('Silence detected - ended streaming', 'info');
+        };
 
         audioRecorder.onVisualizerUpdate = (dataArray) => {
             this.drawVisualizer(dataArray);
@@ -319,10 +319,11 @@ export class UIController {
         // Record button
         const recordButton = document.getElementById('recordButton');
         recordButton.addEventListener('click', () => {
-            if (audioRecorder.isRecording) {
+            const audioRecorder = getAudioRecorder();
+            if (audioRecorder.isRecording || audioRecorder.isContinuousMode) {
                 audioRecorder.stop();
             } else {
-                audioRecorder.start();
+                audioRecorder.startContinuous();
             }
         });
 

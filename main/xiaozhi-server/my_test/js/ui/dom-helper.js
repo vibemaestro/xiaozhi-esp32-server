@@ -14,11 +14,17 @@ let visualizerCanvas = document.getElementById('audioVisualizer');
 // Check if OTA is connected successfully, modify the corresponding style
 export function otaStatusStyle(flan) {
     if (flan) {
-        document.getElementById('otaStatus').textContent = 'OTA Connected';
         document.getElementById('otaStatus').style.color = 'green';
     } else {
-        document.getElementById('otaStatus').textContent = 'OTA Not Connected';
         document.getElementById('otaStatus').style.color = 'red';
+    }
+}
+
+export function wssStatusStyle(flan) {
+    if (flan) {
+        document.getElementById('connectionStatus').style.color = 'green';
+    } else {
+        document.getElementById('connectionStatus').style.color = 'red';
     }
 }
 
