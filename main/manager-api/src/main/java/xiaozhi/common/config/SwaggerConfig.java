@@ -43,7 +43,7 @@ public class SwaggerConfig {
     public GroupedOpenApi oatApi() {
         return GroupedOpenApi.builder()
                 .group("ota")
-                .pathsToMatch("/ota/**")
+                .pathsToMatch("/ota/**", "/otaMag/**")
                 .build();
     }
 
@@ -76,6 +76,22 @@ public class SwaggerConfig {
         return GroupedOpenApi.builder()
                 .group("config")
                 .pathsToMatch("/config/**")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi knowledgeApi() {
+        return GroupedOpenApi.builder()
+                .group("knowledge")
+                .pathsToMatch("/datasets/**")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi botApi() {
+        return GroupedOpenApi.builder()
+                .group("bot")
+                .pathsToMatch("/api/v1/**")
                 .build();
     }
 

@@ -16,6 +16,11 @@ logger = setup_logging()
 
 
 class TTSProvider(TTSProviderBase):
+    TTS_PARAM_CONFIG = [
+        ("ttsVolume", "volume", 0, 3, 1.0, lambda v: round(float(v), 1)),
+        ("ttsRate", "speed", 0, 3, 1.0, lambda v: round(float(v), 1)),
+    ]
+
     def __init__(self, config, delete_audio_file):
         super().__init__(config, delete_audio_file)
         self.url = config.get("url", "ws://192.168.1.10:8092/paddlespeech/tts/streaming")
@@ -25,10 +30,7 @@ class TTSProvider(TTSProviderBase):
             self.spk_id = int(config.get("private_voice"))
         else:
             self.spk_id = int(config.get("spk_id", "0"))
-            
-        sample_rate = config.get("sample_rate", 24000)
-        self.sample_rate = float(sample_rate) if sample_rate else 24000
-        
+
         speed = config.get("speed", 1.0)
         self.speed = float(speed) if speed else 1.0
         
@@ -36,6 +38,10 @@ class TTSProvider(TTSProviderBase):
         self.volume = float(volume) if volume else 1.0
         
         self.delete_audio_file = config.get("delete_audio", True)
+
+        # 应用百分比调整（如果存在），否则使用公有化配置
+        self._apply_percentage_params(config)
+
         if not self.delete_audio_file:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             save_path = config.get("save_path")

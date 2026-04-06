@@ -1,21 +1,26 @@
 import json
 import uuid
 import asyncio
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.connection import ConnectionHandler
 from core.utils.dialogue import Message
 from core.providers.tts.dto.dto import ContentType
 from core.handle.helloHandle import checkWakeupWords
 from plugins_func.register import Action, ActionResponse
 from core.handle.sendAudioHandle import send_stt_message
+from core.handle.reportHandle import enqueue_tool_report
 from core.utils.util import remove_punctuation_and_length
 from core.providers.tts.dto.dto import TTSMessageDTO, SentenceType
 
 TAG = __name__
 
 
-async def handle_user_intent(conn, text):
-    # Preprocess input text, handle possible JSON format
+async def handle_user_intent(conn: "ConnectionHandler", text):
+    # 预处理输入文本，处理可能的JSON格式
     try:
-        if text.strip().startswith('{') and text.strip().endswith('}'):
+        if text.strip().startswith("{") and text.strip().endswith("}"):
             parsed_data = json.loads(text)
             if isinstance(parsed_data, dict) and "content" in parsed_data:
                 text = parsed_data["content"]  # Extract content for intent analysis
@@ -28,7 +33,11 @@ async def handle_user_intent(conn, text):
     if await check_direct_exit(conn, filtered_text):
         return True
 
-    # Check if it is a wakeup word
+    # 明确再见不被打断
+    if conn.is_exiting:
+        return True
+
+    # 检查是否是唤醒词
     if await checkWakeupWords(conn, filtered_text):
         return True
 
@@ -45,21 +54,22 @@ async def handle_user_intent(conn, text):
     return await process_intent_result(conn, intent_result, text)
 
 
-async def check_direct_exit(conn, text):
-    """Check if there is a clear exit command"""
+async def check_direct_exit(conn: "ConnectionHandler", text):
+    """检查是否有明确的退出命令"""
     _, text = remove_punctuation_and_length(text)
     cmd_exit = conn.cmd_exit
     for cmd in cmd_exit:
         if text == cmd:
             conn.logger.bind(tag=TAG).info(f"Detected clear exit command: {text}")
             await send_stt_message(conn, text)
+            conn.is_exiting = True
             await conn.close()
             return True
     return False
 
 
-async def analyze_intent_with_llm(conn, text):
-    """Use LLM to analyze user intent"""
+async def analyze_intent_with_llm(conn: "ConnectionHandler", text):
+    """使用LLM分析用户意图"""
     if not hasattr(conn, "intent") or not conn.intent:
         conn.logger.bind(tag=TAG).warning("Intent recognition service not initialized")
         return None
@@ -75,8 +85,10 @@ async def analyze_intent_with_llm(conn, text):
     return None
 
 
-async def process_intent_result(conn, intent_result, original_text):
-    """Process intent recognition result"""
+async def process_intent_result(
+    conn: "ConnectionHandler", intent_result, original_text
+):
+    """处理意图识别结果"""
     try:
         # Try to parse result as JSON
         intent_data = json.loads(intent_result)
@@ -94,24 +106,26 @@ async def process_intent_result(conn, intent_result, original_text):
             if function_name == "result_for_context":
                 await send_stt_message(conn, original_text)
                 conn.client_abort = False
-                
+
                 def process_context_result():
                     conn.dialogue.put(Message(role="user", content=original_text))
-                    
+
                     from core.utils.current_time import get_current_time_info
 
-                    current_time, today_date, today_weekday, lunar_date = get_current_time_info()
-                    
-                    # Build context-aware base prompt
-                    context_prompt = f"""Current time: {current_time}
-                                        Today's date: {today_date} ({today_weekday})
-                                        Today's lunar date: {lunar_date}
+                    current_time, today_date, today_weekday, lunar_date = (
+                        get_current_time_info()
+                    )
 
-                                        Please answer the user's question based on the above information: {original_text}"""
-                    
+                    # 构建带上下文的基础提示
+                    context_prompt = f"""当前时间：{current_time}
+                                        今天日期：{today_date} ({today_weekday})
+                                        今天农历：{lunar_date}
+
+                                        请根据以上信息回答用户的问题：{original_text}"""
+
                     response = conn.intent.replyResult(context_prompt, original_text)
                     speak_txt(conn, response)
-                
+
                 conn.executor.submit(process_context_result)
                 return True
 
@@ -133,26 +147,42 @@ async def process_intent_result(conn, intent_result, original_text):
             await send_stt_message(conn, original_text)
             conn.client_abort = False
 
-            # Use executor to execute function call and result processing
+            # 准备工具调用参数
+            tool_input = {}
+            if function_args:
+                if isinstance(function_args, str):
+                    tool_input = json.loads(function_args) if function_args else {}
+                elif isinstance(function_args, dict):
+                    tool_input = function_args
+
+            # 上报工具调用
+            enqueue_tool_report(conn, function_name, tool_input)
+
+            # 使用executor执行函数调用和结果处理
             def process_function_call():
                 conn.dialogue.put(Message(role="user", content=original_text))
-
-                # Use unified tool processor to handle all tool calls
+                
+                # 工具调用超时时间
+                tool_call_timeout = int(conn.config.get("tool_call_timeout", 30))
+                # 使用统一工具处理器处理所有工具调用
                 try:
                     result = asyncio.run_coroutine_threadsafe(
                         conn.func_handler.handle_llm_function_call(
                             conn, function_call_data
                         ),
                         conn.loop,
-                    ).result()
+                    ).result(timeout=tool_call_timeout)
                 except Exception as e:
                     conn.logger.bind(tag=TAG).error(f"Tool call failed: {e}")
                     result = ActionResponse(
-                        action=Action.ERROR, result=str(e), response=str(e)
+                        action=Action.ERROR, result="工具调用超时，请一会再试下哈", response="工具调用超时，请一会再试下哈"
                     )
 
+                # 上报工具调用结果
                 if result:
-                    if result.action == Action.RESPONSE:  # Directly reply to frontend
+                    enqueue_tool_report(conn, function_name, tool_input, str(result.result) if result.result else None, report_tool_call=False)
+
+                    if result.action == Action.RESPONSE:  # 直接回复前端
                         text = result.response
                         if text is not None:
                             speak_txt(conn, text)
@@ -167,7 +197,7 @@ async def process_intent_result(conn, intent_result, original_text):
                         result.action == Action.NOTFOUND
                         or result.action == Action.ERROR
                     ):
-                        text = result.result
+                        text = result.response if result.response else result.result
                         if text is not None:
                             speak_txt(conn, text)
                     elif function_name != "play_music":
@@ -188,7 +218,10 @@ async def process_intent_result(conn, intent_result, original_text):
         return False
 
 
-def speak_txt(conn, text):
+def speak_txt(conn: "ConnectionHandler", text):
+    # 记录文本
+    conn.tts_MessageText = text
+
     conn.tts.tts_text_queue.put(
         TTSMessageDTO(
             sentence_id=conn.sentence_id,

@@ -95,6 +95,7 @@ public class ModelProviderServiceImpl extends BaseServiceImpl<ModelProviderDao, 
 
         QueryWrapper<ModelProviderEntity> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("model_type", StringUtils.isBlank(modelType) ? "" : modelType);
+        queryWrapper.orderByAsc("sort");
         List<ModelProviderEntity> providerEntities = modelProviderDao.selectList(queryWrapper);
         return ConvertUtils.sourceToTarget(providerEntities, ModelProviderDTO.class);
     }
@@ -122,12 +123,6 @@ public class ModelProviderServiceImpl extends BaseServiceImpl<ModelProviderDao, 
                     .like("provider_code", modelProviderDTO.getName()));
         }
         return getPageData(modelProviderDao.selectPage(pageParam, wrapper), ModelProviderDTO.class);
-    }
-
-    public static void main(String[] args) {
-        String jsonString = "\"[]\"";
-        JSONArray jsonArray = new JSONArray(jsonString);
-        System.out.println("字符串转 JSONArray: " + jsonArray.toString());
     }
 
     @Override

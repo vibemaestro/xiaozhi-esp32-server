@@ -49,15 +49,15 @@
               <span v-else>{{ scope.row.remark }}</span>
             </template>
           </el-table-column>
-          <el-table-column v-if="showReferenceColumns" :label="$t('ttsModel.cloneAudioPath')" align="center">
+          <el-table-column v-if="showReferenceColumns" :label="$t('ttsModel.referenceAudioPath')" align="center">
             <template slot-scope="scope">
-              <el-input v-if="scope.row.editing" v-model="scope.row.referenceAudio" :placeholder="$t('ttsModel.enterCloneAudioPath')"></el-input>
+              <el-input v-if="scope.row.editing" v-model="scope.row.referenceAudio" :placeholder="$t('ttsModel.enterReferenceAudio')"></el-input>
               <span v-else>{{ scope.row.referenceAudio }}</span>
             </template>
           </el-table-column>
-          <el-table-column v-if="showReferenceColumns" :label="$t('ttsModel.cloneAudioText')" align="center">
+          <el-table-column v-if="showReferenceColumns" :label="$t('ttsModel.referenceText')" align="center">
             <template slot-scope="scope">
-              <el-input v-if="scope.row.editing" v-model="scope.row.referenceText" :placeholder="$t('ttsModel.enterCloneAudioText')"></el-input>
+              <el-input v-if="scope.row.editing" v-model="scope.row.referenceText" :placeholder="$t('ttsModel.enterReferenceText')"></el-input>
               <span v-else>{{ scope.row.referenceText }}</span>
             </template>
           </el-table-column>
@@ -71,8 +71,14 @@
                     {{ $t('ttsModel.delete') }}
                   </el-button>
               </template>
-              <el-button v-else type="success" size="mini" @click="saveEdit(scope.row)" class="save-Tts">{{ $t('ttsModel.save') }}
+              <template v-else>
+                <el-button type="success" size="mini" @click="cancelEdit(scope.row)" class="save-Tts">
+                  {{ $t('button.cancel') }}
                 </el-button>
+                <el-button type="success" size="mini" @click="saveEdit(scope.row)" class="save-Tts">
+                  {{ $t('ttsModel.save') }}
+                </el-button>
+              </template>
             </template>
           </el-table-column>
         </el-table>
@@ -340,6 +346,17 @@ export default {
       this.$set(row, 'originalData', { ...row });
     },
 
+    cancelEdit(row) {
+      // 通过新增创建的数据，取消编辑时，需要从数组中移除
+      if (!row.id) {
+        this.ttsModels.shift(row);
+      } else {
+        Object.assign(row, row.originalData);
+        delete row.originalData;
+      }
+      row.editing = false;
+    },
+
     saveEdit(row) {
       if (!row.voiceCode || !row.voiceName || !row.languageType) {
         this.$message.error({
@@ -447,7 +464,7 @@ export default {
         referenceText: '',
         selected: false,
         editing: true,
-        sort: maxSort + 1
+        sort: 0 // 新增数据默认排序在顶部
       };
 
       this.ttsModels.unshift(newRow);

@@ -58,12 +58,16 @@ export function saveConfig() {
 
 // 获取配置值
 export function getConfig() {
-    const deviceMac = document.getElementById('deviceMac').value.trim();
+    // 从DOM获取值
+    const deviceMac = document.getElementById('deviceMac')?.value.trim() || '';
+    const deviceName = document.getElementById('deviceName')?.value.trim() || '';
+    const clientId = document.getElementById('clientId')?.value.trim() || '';
+
     return {
         deviceId: deviceMac,  // 使用MAC地址作为deviceId
-        deviceName: document.getElementById('deviceName').value.trim(),
-        deviceMac: deviceMac,
-        clientId: document.getElementById('clientId').value.trim()
+        deviceName,
+        deviceMac,
+        clientId
     };
 }
 

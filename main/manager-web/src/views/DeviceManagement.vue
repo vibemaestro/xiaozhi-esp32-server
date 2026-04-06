@@ -64,6 +64,9 @@
                   <el-button size="mini" type="text" @click="handleUnbind(scope.row.device_id)">
                     {{ $t('device.unbind') }}
                   </el-button>
+                  <el-button v-if="isGenerate(scope.row)" size="mini" type="text" @click="handleGenertor(scope.row)">
+                    {{ $t('device.deviceThemeGeneration') }}
+                  </el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -116,7 +119,9 @@
       @refresh="fetchBindDevices(currentAgentId)" />
     <ManualAddDeviceDialog :visible.sync="manualAddDeviceDialogVisible" :agent-id="currentAgentId"
       @refresh="fetchBindDevices(currentAgentId)" />
-
+    <el-footer>
+      <version-footer />
+    </el-footer>
   </div>
 </template>
 
@@ -125,12 +130,14 @@ import Api from '@/apis/api';
 import AddDeviceDialog from "@/components/AddDeviceDialog.vue";
 import HeaderBar from "@/components/HeaderBar.vue";
 import ManualAddDeviceDialog from "@/components/ManualAddDeviceDialog.vue";
+import VersionFooter from "@/components/VersionFooter.vue";
 
 export default {
   components: {
     HeaderBar,
     AddDeviceDialog,
-    ManualAddDeviceDialog
+    ManualAddDeviceDialog,
+    VersionFooter
   },
   data() {
     return {
@@ -334,6 +341,13 @@ export default {
         });
       });
     },
+    handleGenertor(row) {
+      const pathname = window.location.pathname;
+      const basePath = pathname.split('/').slice(0, -1).join('/');
+      const url = `${window.location.origin}${basePath}/generator/?deviceId=${row.device_id}`;
+      sessionStorage.setItem('devicePath', window.location.href);
+      window.location.href = url;
+    },
     goFirst() {
       this.currentPage = 1;
     },
@@ -385,7 +399,10 @@ export default {
 
     // 获取设备状态
     fetchDeviceStatus(agentId) {
+      // 开启表格等待状态，处理动态加载表头导致鼠标所在行的hover事件无法移除的问题
+      this.loading = true;
       Api.device.getDeviceStatus(agentId, ({ data }) => {
+        this.loading = false;
         if (data.code === 0) {
           try {
             // 解析后端返回的设备状态JSON
@@ -467,6 +484,11 @@ export default {
         this.$message.error(msg || this.$t('message.error'))
       })
     },
+    // 判断是否可以生成表情、主题、字体bin文件
+    isGenerate(row) {
+      const version = row.firmwareVersion.replace(/\./g, '');
+      return Number(version) >= 200;
+    },
   }
 };
 </script>
@@ -486,11 +508,9 @@ export default {
 }
 
 .main-wrapper {
-  margin: 5px 22px;
+  height: calc(100vh - 63px - 35px - 72px);
+  margin: 0 22px;
   border-radius: 15px;
-  min-height: calc(100vh - 24vh);
-  height: auto;
-  max-height: 80vh;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   position: relative;
   background: rgba(237, 242, 255, 0.5);
@@ -627,7 +647,7 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-top: 10px;
-  padding-bottom: 10px;
+  /* padding-bottom: 10px; */
 }
 
 
@@ -789,7 +809,7 @@ export default {
   flex: 1;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 40vh);
+  /* max-height: calc(100vh - 40vh); */
 }
 
 :deep(.el-table__body-wrapper) {

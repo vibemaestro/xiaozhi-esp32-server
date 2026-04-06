@@ -65,7 +65,9 @@ delete_audio: true
 close_connection_no_voice_time: 120
 # TTS request timeout (seconds)
 tts_timeout: 10
-# Enable wake word acceleration cache
+# 工具调用超时时间(秒)
+tool_call_timeout: 30
+# 开启唤醒词加速
 enable_wakeup_words_response_cache: true
 # Enable greeting reply after wake word is detected
 enable_greeting: true
@@ -93,7 +95,8 @@ xiaozhi:
   transport: websocket
   audio_params:
     format: opus
-    sample_rate: 16000
+    # Opus支持的采样率范围为[8000, 12000, 16000, 24000, 48000]
+    sample_rate: 24000
     channels: 1
     frame_duration: 60
 
@@ -206,7 +209,10 @@ prompt: |
 # Default system prompt template file
 prompt_template: agent-base-prompt.txt
 
-# End prompt
+# 系统错误时的回复
+system_error_response: "主人，小智现在有点忙，我们稍后再试吧。"
+
+# 结束语prompt
 end_prompt:
   enable: true # Whether to enable end prompt
   # End statement
@@ -278,8 +284,56 @@ Memory:
   mem0ai:
     type: mem0ai
     # https://app.mem0.ai/dashboard/api-keys
-    # 1000 free calls per month
-    api_key: your mem0ai api key
+    # 每月有1000次免费调用
+    api_key: 你的mem0ai api key
+  powermem:
+    # PowerMem是OceanBase开源的agent记忆组件，通过本地LLM进行记忆总结
+    # 费用说明：PowerMem本身免费，实际费用取决于所选LLM和数据库
+    # - 使用sqlite + 免费LLM(如glm-4-flash) = 完全免费
+    # - 使用云端LLM或云端数据库 = 按对应服务收费
+    # GitHub: https://github.com/oceanbase/powermem
+    # 官网: https://www.powermem.ai/
+    # 使用示例: https://github.com/oceanbase/powermem/tree/main/examples
+    type: powermem
+    # 是否启用用户画像功能
+    # - false: 使用普通记忆模式(AsyncMemory)
+    # - true: 使用用户画像模式(UserMemory)，自动提取用户信息
+    # 用户画像功能支持: oceanbase、seekdb、sqlite (powermem 0.3.0+)
+    enable_user_profile: true
+    # ========== LLM 配置 ==========
+    # 通义千问: https://bailian.console.aliyun.com/?apiKey=1#/api-key
+    # 智谱AI(免费): https://bigmodel.cn/usercenter/proj-mgmt/apikeys
+    llm:
+      provider: openai  # 可选: qwen, openai, zhipu 等
+      config:
+        api_key: 你的LLM API密钥
+        model: qwen-plus
+        # openai_base_url: https://api.openai.com/v1  # 可选，自定义服务地址
+    # ========== Embedding 配置 ==========
+    embedder:
+      provider: openai  # 可选: qwen, openai 等
+      config:
+        api_key: 你的嵌入模型API密钥
+        model: text-embedding-v4
+        openai_base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+        # embedding_dims: 1024  # 向量维度，非1536时需配置
+
+    # ========== Database 配置 ==========
+    # oceanbase(推荐,最佳性能), seekdb(推荐,AI应用存储一体), postgres, sqlite(轻量备选)
+    # 用户画像功能支持: oceanbase、seekdb、sqlite
+    vector_store:
+      provider: sqlite
+      config: {}  # SQLite 无需额外配置
+      # OceanBase 配置示例:
+      # provider: oceanbase
+      # config:
+      #   host: 127.0.0.1
+      #   port: 2881
+      #   user: root@test
+      #   password: your_password
+      #   db_name: powermem
+      #   collection_name: memories  # 默认表名，如创建维度错误请删除此表或更改名称
+      #   embedding_model_dims: 1024  # 嵌入向量维度，注意跟使用模型适配，以智普为例：embedding-2的维度是1024，embedding-3的维度是2048
   nomem:
     # If you don't want memory function, use nomem
     type: nomem
@@ -297,14 +351,14 @@ ASR:
     model_dir: models/SenseVoiceSmall
     output_dir: tmp/
   FunASRServer:
-    # Deploy FunASR separately and use FunASR API service in just five commands:
-    # 1: mkdir -p ./funasr-runtime-resources/models
-    # 2: sudo docker run -p 10096:10095 -it --privileged=true -v $PWD/funasr-runtime-resources/models:/workspace/models registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.12
-    # After entering the container, 3: cd FunASR/runtime
-    # Don’t exit the container, then 4: nohup bash run_server_2pass.sh --download-model-dir /workspace/models --vad-dir damo/speech_fsmn_vad_zh-cn-16k-common-onnx --model-dir damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-onnx  --online-model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx  --punc-dir damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx --lm-dir damo/speech_ngram_lm_zh-cn-ai-wesp-fst --itn-dir thuduj12/fst_itn_zh --hotword /workspace/models/hotwords.txt > log.txt 2>&1 &
-    # Next, 5: tail -f log.txt
-    # When you see the model download logs finish, you are ready to connect and use it!
-    # The above is for CPU inference; with GPU see: https://github.com/modelscope/FunASR/blob/main/runtime/docs/SDK_advanced_guide_online_zh.md
+    # 独立部署FunASR，使用FunASR的API服务，只需要五句话
+    # 第一句：mkdir -p ./funasr-runtime-resources/models
+    # 第二句：sudo docker run -p 10096:10095 -it --privileged=true -v $PWD/funasr-runtime-resources/models:/workspace/models registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.12
+    # 上一句话执行后会进入到容器，继续第三句：cd FunASR/runtime
+    # 不要退出容器，继续在容器中执行第四句：nohup bash run_server_2pass.sh --download-model-dir /workspace/models --vad-dir damo/speech_fsmn_vad_zh-cn-16k-common-onnx --model-dir iic/SenseVoiceSmall-onnx  --online-model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx  --punc-dir damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx --lm-dir damo/speech_ngram_lm_zh-cn-ai-wesp-fst --itn-dir thuduj12/fst_itn_zh --hotword /workspace/models/hotwords.txt > log.txt 2>&1 &
+    # 上一句话执行后会进入到容器，继续第五句：tail -f log.txt
+    # 第五句话执行完后，会看到模型下载日志，下载完后就可以连接使用了
+    # 以上是使用CPU推理，如果有GPU，详细参考：https://github.com/modelscope/FunASR/blob/main/runtime/docs/SDK_advanced_guide_online_zh.md
     type: fun_server
     host: 127.0.0.1
     port: 10096
@@ -695,6 +749,7 @@ TTS:
     type: edge
     voice: zh-CN-XiaoxiaoNeural
     output_dir: tmp/
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   DoubaoTTS:
     # TTS API type
     type: doubao
@@ -713,7 +768,8 @@ TTS:
     speed_ratio: 1.0
     volume_ratio: 1.0
     pitch_ratio: 1.0
-  # Volcano TTS supports bidirectional streaming TTS
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
+  #火山tts，支持双向流式tts
   HuoshanDoubleStreamTTS:
     type: huoshan_double_stream
     # Enable TTS large model and purchase voices at: https://console.volcengine.com/speech/service/10007
@@ -728,13 +784,32 @@ TTS:
     speaker: zh_female_wanwanxiaohe_moon_bigtts
     # 开启WebSocket连接复用，默认复用（注意：复用后设备处于聆听状态时空闲链接会占并发数）
     enable_ws_reuse: True
-    speech_rate: 0
-    loudness_rate: 0
-    pitch: 0
-    # 多情感音色参数，注意：当前仅部分音色支持设置情感。
-    # 相关音色列表：https://www.volcengine.com/docs/6561/1257544
-    emotion: "neutral"  # 情感类型，可选值为：neutral、happy、sad、angry、fearful、disgusted、surprised
-    emotion_scale: 4  # 情感强度，可选值为：1~5，默认值为4
+    # 相关参数文档：https://www.volcengine.com/docs/6561/1329505
+    # 音频输出配置（audio_params）- 用户可自定义添加火山引擎支持的任何音频参数
+    audio_params:
+      speech_rate: 0  # 语速(-50~100)
+      loudness_rate: 0  # 音量(-50~100)
+      # 多情感音色参数，注意：当前仅部分音色支持设置情感。
+      # 相关音色列表：https://www.volcengine.com/docs/6561/1257544
+      # emotion: "neutral"  # 情感类型（仅部分音色支持）：neutral、happy、sad、angry、fearful、disgusted、surprised
+      # emotion_scale: 4  # 情感强度(1~5)
+    # 高级文本处理配置（additions）- 用户可自定义添加火山引擎支持的任何高级参数
+    additions:
+      post_process:
+        pitch: 0  # 音高(-12~12)
+      # aigc_metadata: {}  # AIGC元数据配置
+      # cache_config: {}  # 缓存配置
+    # 混音控制配置（mix_speaker）- 多音色混合（仅 TTS 1.0）
+    # 混音功能主要适用于豆包语音合成模型1.0的音色，使用时需要将req_params.speaker设置为custom_mix_bigtts
+    # mix_speaker:
+    #   speakers:
+    #     - source_speaker: zh_male_bvlazysheep
+    #       mix_factor: 0.3
+    #     - source_speaker: BV120_streaming
+    #       mix_factor: 0.3
+    #     - source_speaker: zh_male_ahu_conversation_wvae_bigtts
+    #       mix_factor: 0.4
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   CosyVoiceSiliconflow:
     type: siliconflow
     # SiliconFlow TTS
@@ -744,6 +819,7 @@ TTS:
     output_dir: tmp/
     access_token: your SiliconFlow API key
     response_format: wav
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   CozeCnTTS:
     type: cozecn
     # COZECN TTS
@@ -752,6 +828,10 @@ TTS:
     output_dir: tmp/
     access_token: your coze web key
     response_format: wav
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
+    # 以下可不用设置，使用默认设置
+    # speed: 1  # 语速：-0.5到2
+    # loudness_rate: 0  # 音量：-50到100
   VolcesAiGatewayTTS:
     type: openai
     # Volcengine - Edge LLM Gateway TTS
@@ -766,6 +846,7 @@ TTS:
     voice: zh_male_shaonianzixin_moon_bigtts
     speed: 1
     output_dir: tmp/
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   FishSpeech:
     # For integration guide see: https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/fish-speech-integration.md
     type: fishspeech
@@ -787,6 +868,7 @@ TTS:
     rate: 44100
     api_key: "your_api_key"
     api_url: "http://127.0.0.1:8080/v1/tts"
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   GPT_SOVITS_V2:
     # TTS API type
     # To start TTS:
@@ -812,6 +894,7 @@ TTS:
     parallel_infer: true
     repetition_penalty: 1.35
     aux_ref_audio_paths: []
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   GPT_SOVITS_V3:
     # TTS API type for GPT-SoVITS-v3lora-20250228
     # To start TTS: python api.py
@@ -830,6 +913,7 @@ TTS:
     inp_refs: []
     sample_steps: 32
     if_sr: false
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   MinimaxTTSHTTPStream:
   # Minimax streaming text-to-speech service
     type: minimax_httpstream
@@ -850,7 +934,6 @@ TTS:
     #       - "处理/(chu3)(li3)"
     #       - "危险/dangerous"
     # audio_setting:
-    #     sample_rate: 24000
     #     bitrate: 128000
     #     format: "mp3"
     #     channel: 1
@@ -862,6 +945,7 @@ TTS:
     #     voice_id: female-shaonv
     #     weight: 1
     # language_boost: auto
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   AliyunTTS:
     # Alibaba Cloud TTS, enable the service and get credentials first
     # Platform: https://nls-portal.console.aliyun.com/
@@ -878,10 +962,10 @@ TTS:
 
     # The following are optional, use defaults if not set
     # format: wav
-    # sample_rate: 16000
     # volume: 50
     # speech_rate: 0
     # pitch_rate: 0
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   AliyunStreamTTS:
     # Alibaba Cloud CosyVoice model streaming TTS
     # Uses FlowingSpeechSynthesizer API for low latency, natural quality
@@ -893,19 +977,19 @@ TTS:
     # 3 stages: StartSynthesis -> RunSynthesis -> StopSynthesis
     type: aliyun_stream
     output_dir: tmp/
-    appkey: your Aliyun project Appkey
-    token: your Aliyun AccessToken (24hr, for long term use access_key_id/secret)
+    appkey: 你的阿里云智能语音交互服务项目Appkey
+    token: 你的阿里云智能语音交互服务AccessToken，临时的24小时，要长期用下方的access_key_id，access_key_secret
     voice: longxiaochun
-    access_key_id: your Aliyun account access_key_id
-    access_key_secret: your Aliyun account access_key_secret
-    # As of July 21, 2025, only Beijing node supports large model voices
+    access_key_id: 你的阿里云账号access_key_id
+    access_key_secret: 你的阿里云账号access_key_secret
+    # 截至2025年7月21日大模型音色只有北京节点采用，其他节点暂不支持
     host: nls-gateway-cn-beijing.aliyuncs.com
-    # The following are optional, use defaults if not set
-    # format: pcm  # audio format: pcm, wav, mp3
-    # sample_rate: 16000  # sample rate: 8000, 16000, 24000
-    # volume: 50          # volume: 0-100
-    # speech_rate: 0      # speech rate: -500~500
-    # pitch_rate: 0       # pitch: -500~500
+    # 以下可不用设置，使用默认设置
+    # format: pcm  # 音频格式：pcm、wav、mp3
+    # volume: 50  # 音量：0-100
+    # speech_rate: 0  # 语速：-500到500
+    # pitch_rate: 0  # 语调：-500到500
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   TencentTTS:
     # Tencent Cloud TTS, enable on Tencent Cloud first
     # Apply for appid, secret_id, secret_key at: https://console.cloud.tencent.com/cam/capi
@@ -917,7 +1001,11 @@ TTS:
     secret_key: your Tencent SecretKey
     region: ap-guangzhou
     voice: 101001
-
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
+    # 以下可不用设置，使用默认设置
+    # format: wav  # 音频格式：pcm、wav、mp3
+    # volume: 0  # 音量：-10到10
+    # speech_rate: 0  # 语速：-2到6
   TTS302AI:
     # 302AI TTS, register and top up at 302 platform, then obtain your key
     # Add 302.ai TTS config
@@ -930,7 +1018,8 @@ TTS:
     # Taiwan Xiaoxiao voice
     voice: "zh_female_wanwanxiaohe_moon_bigtts"
     output_dir: tmp/
-    access_token: "your_302API_key"
+    access_token: "你的302API密钥"
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   GizwitsTTS:
     type: doubao
     # Volcano as the base; full enterprise-class Volcano Engine TTS access
@@ -941,7 +1030,8 @@ TTS:
     # Taiwan Xiaoxiao voice
     voice: "zh_female_wanwanxiaohe_moon_bigtts"
     output_dir: tmp/
-    access_token: "your Gizwits API key"
+    access_token: "你的机智云API key"
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   ACGNTTS:
     # Online: https://acgn.ttson.cn/
     # Token purchase: www.ttson.cn
@@ -959,6 +1049,7 @@ TTS:
     format: mp3
     output_dir: tmp/
     emotion: 1
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   OpenAITTS:
     # Official OpenAI TTS, supports most languages globally
     type: openai
@@ -974,6 +1065,7 @@ TTS:
     # Speed range: 0.25-4.0
     speed: 1
     output_dir: tmp/
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   CustomTTS:
     # Custom TTS interface, parameters configurable; can connect to many TTS services
     # Example: local KokoroTTS deployment
@@ -996,6 +1088,7 @@ TTS:
       # Authorization: Bearer xxxx
     format: mp3    # Returned audio format
     output_dir: tmp/
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   LinkeraiTTS:
     type: linkerai
     api_url: https://tts.linkerai.cn/tts
@@ -1008,6 +1101,7 @@ TTS:
     access_token: "U4YdYXVfpwWnk2t5Gp822zWPCuORyeJL"
     voice: "OUeAo1mhq6IBExi"
     output_dir: tmp/
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   PiperTTS:
     # Local Piper (piper-tts) streaming TTS using onnx model files
     type: piper
@@ -1029,12 +1123,12 @@ TTS:
     # For streaming API see: https://github.com/PaddlePaddle/PaddleSpeech/wiki/PaddleSpeech-Server-WebSocket-API
     type: paddle_speech
     protocol: websocket # protocol choices = ['websocket', 'http']
-    url: ws://127.0.0.1:8092/paddlespeech/tts/streaming  # TTS service URL; websocket default is ws://127.0.0.1:8092/paddlespeech/tts/streaming, http default is http://127.0.0.1:8090/paddlespeech/tts
-    spk_id: 0       # Speaker ID, 0 is usually default
-    sample_rate: 24000  # Sample rate, (websocket default is 24000, http default is 0 (auto))
-    speed: 1.0     # Speaking rate; 1.0 is normal, >1 is faster, <1 is slower
-    volume: 1.0    # Volume; 1.0 is normal volume, >1 is louder, <1 is quieter
-    save_path:     # Save path
+    url: ws://127.0.0.1:8092/paddlespeech/tts/streaming  # TTS 服务的 URL 地址，指向本地服务器 [websocket默认ws://127.0.0.1:8092/paddlespeech/tts/streaming，http默认http://127.0.0.1:8090/paddlespeech/tts]
+    spk_id: 0  # 发音人 ID，0 通常表示默认的发音人
+    speed: 1.0  # 语速，1.0 表示正常语速，>1 表示加快，<1 表示减慢
+    volume: 1.0  # 音量，1.0 表示正常音量，>1 表示增大，<1 表示减小
+    save_path:   # 保存路径
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   IndexStreamTTS:
     # Index-TTS-vLLM-based TTS service
     # See guide: https://github.com/Ksuriuri/index-tts-vllm/blob/master/README.md
@@ -1044,6 +1138,7 @@ TTS:
     # Default voice; for others, register under assets
     voice: "jay_klee"
     output_dir: tmp/
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   AliBLTTS:
     # Alibaba Bailian CosyVoice model stream TTS
     # Get api_key: https://bailian.console.aliyun.com/?apiKey=1#/api-key
@@ -1053,12 +1148,12 @@ TTS:
     model: "cosyvoice-v2"
     voice: "longcheng_v2"
     output_dir: tmp/
-    # The following are optional, use defaults if not set
-    # format: pcm   # Audio formats: pcm, wav, mp3, opus
-    # sample_rate: 24000  # Rate: 16000, 24000, 48000
-    # volume: 50   # Volume: 0-100
-    # rate: 1      # Speed: 0.5–2
-    # pitch: 1     # Pitch: 0.5–2
+    # 以下可不用设置，使用默认设置
+    # format: pcm  # 音频格式：pcm、wav、mp3、opus
+    # volume: 50  # 音量：0-100
+    # rate: 1  # 语速：0.5~2
+    # pitch: 1  # 语调：0.5~2
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
   XunFeiTTS:
     # iFlytek TTS official: https://www.xfyun.cn/
     # Login and create app at https://console.xfyun.cn/app/myapp
@@ -1071,13 +1166,13 @@ TTS:
     api_key: your api_key
     voice: x5_lingxiaoxuan_flow
     output_dir: tmp/
-    # The following can be left unset, use default settings, note that V5 voice does not support oral configuration
-    # oral_level: mid  # Orality level: high, mid, low
-    # spark_assist: 1  # Whether to use large model for orality: 1=on, 0=off
-    # stop_split: 0  # Server-side sentence split: 0=on, 1=off
-    # remain: 0  # Preserve original wording: 1=keep, 0=not keep
-    # format: raw  # Audio format: raw(PCM), lame(MP3), speex, opus, opus-wb, opus-swb, speex-wb
-    # sample_rate: 24000  # Sample rate: 16000, 8000, 24000
-    # volume: 50  # Volume: 0-100
-    # speed: 50  # Speed: 0-100
-    # pitch: 50  # Pitch: 0-100
+    # 以下可不用设置，使用默认设置，注意V5音色不支持口语化配置
+    # oral_level: mid  # 口语化等级：high, mid, low
+    # spark_assist: 1  # 是否通过大模型进行口语化 开启:1, 关闭:0
+    # stop_split: 0  # 关闭服务端拆句 不关闭：0，关闭：1
+    # remain: 0  # 是否保留原书面语的样子	保留:1, 不保留:0
+    # format: raw  # 音频格式：raw(PCM), lame(MP3), speex, opus, opus-wb, opus-swb, speex-wb
+    # volume: 50  # 音量：0-100
+    # speed: 50  # 语速：0-100
+    # pitch: 50  # 语调：0-100
+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文

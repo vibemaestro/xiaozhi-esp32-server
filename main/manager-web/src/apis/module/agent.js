@@ -170,6 +170,9 @@ export default {
                 RequestService.clearRequestTime();
                 callback(res);
             })
+            .fail((err) => {
+                callback(err);
+            })
             .networkFail(() => {
                 RequestService.reAjaxFun(() => {
                     this.getAgentMcpAccessAddress(agentId, callback);
@@ -379,6 +382,53 @@ export default {
             .networkFail(() => {
                 RequestService.reAjaxFun(() => {
                     this.getDownloadUrl(agentId, sessionId, callback);
+                });
+            }).send();
+    },
+    
+    // 搜索智能体
+    searchAgent(keyword, searchType, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/list?keyword=${encodeURIComponent(keyword)}&searchType=${searchType}`)
+            .method('GET')
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.searchAgent(keyword, searchType, callback);
+                });
+            }).send();
+    },
+    // 获取智能体标签
+    getAgentTags(agentId, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/tags`)
+            .method('GET')
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.getAgentTags(agentId, callback);
+                });
+            }).send();
+    },
+    // 保存智能体标签
+    saveAgentTags(agentId, tags, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/tags`)
+            .method('PUT')
+            .data(tags)
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.saveAgentTags(agentId, tags, callback);
                 });
             }).send();
     },

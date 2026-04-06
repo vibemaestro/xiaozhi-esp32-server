@@ -1,6 +1,10 @@
 import json
 import time
 import asyncio
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.connection import ConnectionHandler
 from core.utils import textUtils
 from core.utils.util import audio_to_data
 from core.providers.tts.dto.dto import SentenceType
@@ -13,11 +17,10 @@ AUDIO_FRAME_DURATION = 60
 PRE_BUFFER_COUNT = 5
 
 
-async def sendAudioMessage(conn, sentenceType, audios, text):
+async def sendAudioMessage(conn: "ConnectionHandler", sentenceType, audios, text):
     if conn.tts.tts_audio_first_sentence:
         conn.logger.bind(tag=TAG).info(f"Send first audio: {text}")
         conn.tts.tts_audio_first_sentence = False
-        await send_tts_message(conn, "start", None)
 
     if sentenceType == SentenceType.FIRST:
         # 同一句子的后续消息加入流控队列，其他情况立即发送
@@ -47,7 +50,7 @@ async def sendAudioMessage(conn, sentenceType, audios, text):
             await conn.close()
 
 
-async def _wait_for_audio_completion(conn):
+async def _wait_for_audio_completion(conn: "ConnectionHandler"):
     """
     Wait for audio queue to be empty and wait for pre-buffer packets to be played
 
@@ -70,7 +73,9 @@ async def _wait_for_audio_completion(conn):
         conn.logger.bind(tag=TAG).debug("Audio sent completed")
 
 
-async def _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence):
+async def _send_to_mqtt_gateway(
+    conn: "ConnectionHandler", opus_packet, timestamp, sequence
+):
     """
     Send Opus data packet with 16-byte header to mqtt_gateway
     Args:
@@ -92,7 +97,9 @@ async def _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence):
     await conn.websocket.send(complete_packet)
 
 
-async def sendAudio(conn, audios, frame_duration=AUDIO_FRAME_DURATION):
+async def sendAudio(
+    conn: "ConnectionHandler", audios, frame_duration=AUDIO_FRAME_DURATION
+):
     """
     Send audio packets, use AudioRateController for precise flow control
 
@@ -121,7 +128,9 @@ async def sendAudio(conn, audios, frame_duration=AUDIO_FRAME_DURATION):
     )
 
 
-def _get_or_create_rate_controller(conn, frame_duration, is_single_packet):
+def _get_or_create_rate_controller(
+    conn: "ConnectionHandler", frame_duration, is_single_packet
+):
     """
     Get or create RateController and flow_control
 
@@ -133,12 +142,27 @@ def _get_or_create_rate_controller(conn, frame_duration, is_single_packet):
     Returns:
         (rate_controller, flow_control)
     """
-    # Check if reset is needed: single packet mode and sentence_id changes, or controller does not exist
-    need_reset = (
-        is_single_packet
-        and getattr(conn, "audio_flow_control", {}).get("sentence_id")
-        != conn.sentence_id
-    ) or not hasattr(conn, "audio_rate_controller")
+    # 检查是否需要重置控制器
+    need_reset = False
+
+    if not hasattr(conn, "audio_rate_controller"):
+        # 控制器不存在，需要创建
+        need_reset = True
+    else:
+        rate_controller = conn.audio_rate_controller
+
+        # 后台发送任务已停止, 则需要重置
+        if (
+            not rate_controller.pending_send_task
+            or rate_controller.pending_send_task.done()
+        ):
+            need_reset = True
+        # 当sentence_id 变化，需要重置
+        elif (
+            getattr(conn, "audio_flow_control", {}).get("sentence_id")
+            != conn.sentence_id
+        ):
+            need_reset = True
 
     if need_reset:
         # Create or get rate_controller
@@ -162,7 +186,7 @@ def _get_or_create_rate_controller(conn, frame_duration, is_single_packet):
     return conn.audio_rate_controller, conn.audio_flow_control
 
 
-def _start_background_sender(conn, rate_controller, flow_control):
+def _start_background_sender(conn: "ConnectionHandler", rate_controller, flow_control):
     """
     Start background sending loop task
 
@@ -179,14 +203,13 @@ def _start_background_sender(conn, rate_controller, flow_control):
 
         conn.last_activity_time = time.time() * 1000
         await _do_send_audio(conn, packet, flow_control)
-        conn.client_is_speaking = True
 
     # Use start_sending to start background loop
     rate_controller.start_sending(send_callback)
 
 
 async def _send_audio_with_rate_control(
-    conn, audio_list, rate_controller, flow_control, send_delay
+    conn: "ConnectionHandler", audio_list, rate_controller, flow_control, send_delay
 ):
     """
     Use rate_controller to send audio packets
@@ -207,18 +230,16 @@ async def _send_audio_with_rate_control(
         # Pre-buffer: send the first N packets directly without delay
         if flow_control["packet_count"] < PRE_BUFFER_COUNT:
             await _do_send_audio(conn, packet, flow_control)
-            conn.client_is_speaking = True
         elif send_delay > 0:
             # Fixed delay mode
             await asyncio.sleep(send_delay)
             await _do_send_audio(conn, packet, flow_control)
-            conn.client_is_speaking = True
         else:
             # Dynamic flow control mode: only add to queue, background loop will send it
             rate_controller.add_audio(packet)
 
 
-async def _do_send_audio(conn, opus_packet, flow_control):
+async def _do_send_audio(conn: "ConnectionHandler", opus_packet, flow_control):
     """
     Execute actual audio sending
     """
@@ -239,8 +260,8 @@ async def _do_send_audio(conn, opus_packet, flow_control):
     flow_control["sequence"] = sequence + 1
 
 
-async def send_tts_message(conn, state, text=None):
-    """Send TTS status message"""
+async def send_tts_message(conn: "ConnectionHandler", state, text=None):
+    """发送 TTS 状态消息"""
     if text is None and state == "sentence_start":
         return
     message = {"type": "tts", "state": state, "session_id": conn.session_id}
@@ -259,15 +280,18 @@ async def send_tts_message(conn, state, text=None):
             await sendAudio(conn, audios)
         # Wait for all audio packets to be sent
         await _wait_for_audio_completion(conn)
-        # Clear server speaking status
+        # 停止音频发送循环（仅在流控器已初始化时调用）
+        if hasattr(conn, "audio_rate_controller") and conn.audio_rate_controller:
+            conn.audio_rate_controller.stop_sending()
+        # 清除服务端讲话状态
         conn.clearSpeakStatus()
 
     # Send message to client
     await conn.websocket.send(json.dumps(message))
 
 
-async def send_stt_message(conn, text):
-    """Send STT status message"""
+async def send_stt_message(conn: "ConnectionHandler", text):
+    """发送 STT 状态消息"""
     end_prompt_str = conn.config.get("end_prompt", {}).get("prompt")
     if end_prompt_str and end_prompt_str == text:
         await send_tts_message(conn, "start")
@@ -293,3 +317,15 @@ async def send_stt_message(conn, text):
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
     )
     await send_tts_message(conn, "start")
+    # 发送start消息后客户端状态会处于说话中状态，同步服务端状态
+    conn.client_is_speaking = True
+
+
+async def send_display_message(conn: "ConnectionHandler", text):
+    """发送纯显示消息"""
+    message = {
+        "type": "stt",
+        "text": text,
+        "session_id": conn.session_id
+    }
+    await conn.websocket.send(json.dumps(message))

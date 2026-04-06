@@ -23,20 +23,16 @@ class ASRProvider(ASRProviderBase):
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-    async def speech_to_text(self, opus_data: List[bytes], session_id: str, audio_format="opus") -> Tuple[Optional[str], Optional[str]]:
+    def requires_file(self) -> bool:
+        return True
+
+    async def speech_to_text(self, opus_data: List[bytes], session_id: str, audio_format="opus", artifacts=None) -> Tuple[Optional[str], Optional[str]]:
         file_path = None
         try:
-            start_time = time.time()
-            if audio_format == "pcm":
-                pcm_data = opus_data
-            else:
-                pcm_data = self.decode_opus(opus_data)
-            file_path = self.save_audio_to_file(pcm_data, session_id)
-
-            logger.bind(tag=TAG).debug(
-                f"Audio file save time: {time.time() - start_time:.3f}s | Path: {file_path}"
-            )
-
+            if artifacts is None:
+                return "", None
+            file_path = artifacts.file_path
+                
             logger.bind(tag=TAG).info(f"file path: {file_path}")
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -78,12 +74,4 @@ class ASRProvider(ASRProviderBase):
         except Exception as e:
             logger.bind(tag=TAG).error(f"Speech recognition failed: {e}")
             return "", None
-        finally:
-            # File cleanup logic
-            if self.delete_audio_file and file_path and os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    logger.bind(tag=TAG).debug(f"Delete audio file: {file_path}")
-                except Exception as e:
-                    logger.bind(tag=TAG).error(f"Delete audio file failed: {file_path} | Error: {e}")
         

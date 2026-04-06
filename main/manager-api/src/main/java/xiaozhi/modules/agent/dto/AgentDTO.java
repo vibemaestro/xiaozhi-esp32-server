@@ -1,9 +1,11 @@
 package xiaozhi.modules.agent.dto;
 
 import java.util.Date;
+import java.util.List;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
+import xiaozhi.modules.agent.dto.AgentTagDTO;
 
 /**
  * 智能体数据传输对象
@@ -45,4 +47,7 @@ public class AgentDTO {
 
     @Schema(description = "设备数量", example = "10")
     private Integer deviceCount;
+
+    @Schema(description = "标签列表")
+    private List<AgentTagDTO> tags;
 }
