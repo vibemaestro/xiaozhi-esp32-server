@@ -743,6 +743,30 @@ VLLM:
     model_name: lite
     api_key: your api_password
 TTS:
+  Vieneu:
+    type: vieneu
+    output_dir: tmp/
+    # (Tùy chọn) ID của giọng đọc, nếu comment dòng dưới lại sẽ tự lấy mặc định (Xuân Vĩnh)
+    # voice_id: "pf_pt"
+
+  ValtecTTS:
+    # Vietnamese TTS — valtec-tts (Multi-Speaker, CPU-only, auto-downloads model from HuggingFace)
+    # Install: pip install git+https://github.com/tronghieuit/valtec-tts.git
+    # Available speakers: NF (North Female), SF (South Female), NM1, NM2 (North Male), SM (South Male)
+    type: valtec
+    output_dir: tmp/
+    # Speaker selection
+    speaker: NF
+    # Device: auto | cpu | cuda
+    device: auto
+    # Optional: path to local model directory (leave empty to auto-download from HuggingFace)
+    # model_path: models/valtec-tts/
+    # Synthesis parameters
+    noise_scale: 0.6
+    noise_scale_w: 0.7
+    sdp_ratio: 0.0
+    speed: 1.0
+
   # Current supported types: edge, doubao; custom types can be added
   EdgeTTS:
     # TTS API type
