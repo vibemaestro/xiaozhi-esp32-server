@@ -3,6 +3,10 @@ import os
 import sys
 import uuid
 import asyncio
+import zipfile
+import urllib.request
+import tempfile
+import shutil
 from pathlib import Path
 from datetime import datetime
 from core.providers.tts.base import TTSProviderBase
@@ -11,12 +15,90 @@ from core.providers.tts.base import TTSProviderBase
 # the project root (containing infer.py + src/) to be on sys.path.
 # When installed via `pip install git+...`, infer.py is NOT included in the package.
 # So we add the local cloned repo root to sys.path as a fallback.
-_PROVIDER_DIR = Path(__file__).parent                        # core/providers/tts/
-_SERVER_ROOT = (_PROVIDER_DIR / "../../../").resolve()       # xiaozhi-server/
+_PROVIDER_DIR = Path(__file__).parent  # core/providers/tts/
+_SERVER_ROOT = (_PROVIDER_DIR / "../../../").resolve()  # xiaozhi-server/
 _VALTEC_REPO = _SERVER_ROOT / "models" / "valtec-tts-repo"
+_VALTEC_ZIP_URL = "https://github.com/tronghieuit/valtec-tts/archive/refs/heads/dev.zip"
 
-if _VALTEC_REPO.is_dir() and str(_VALTEC_REPO) not in sys.path:
-    sys.path.insert(0, str(_VALTEC_REPO))
+
+def _ensure_valtec_repo():
+    """Ensure valtec-tts repo is available, download if needed."""
+    # Check if repo already exists and has infer.py
+    if _VALTEC_REPO.is_dir() and (_VALTEC_REPO / "infer.py").exists():
+        if str(_VALTEC_REPO) not in sys.path:
+            sys.path.insert(0, str(_VALTEC_REPO))
+        return str(_VALTEC_REPO)
+
+    # Try to use temp directory if can't write to models dir
+    temp_repo = Path(tempfile.gettempdir()) / "valtec-tts-repo"
+
+    # Check temp repo
+    if temp_repo.is_dir() and (temp_repo / "infer.py").exists():
+        if str(temp_repo) not in sys.path:
+            sys.path.insert(0, str(temp_repo))
+        return str(temp_repo)
+
+    # Need to download - prefer persistent location if writable
+    target_dir = (
+        _VALTEC_REPO if os.access(_SERVER_ROOT / "models", os.W_OK) else temp_repo
+    )
+
+    print(f"[ValtecTTS] Downloading repository to {target_dir}...")
+    zip_path = None
+    extract_dir = None
+    try:
+        # Create temp file for ZIP download
+        fd, zip_path = tempfile.mkstemp(suffix=".zip")
+        os.close(fd)
+
+        # Download ZIP archive
+        print(f"[ValtecTTS] Downloading from {_VALTEC_ZIP_URL}...")
+        urllib.request.urlretrieve(_VALTEC_ZIP_URL, zip_path)
+
+        # Extract to temp directory first
+        extract_dir = Path(tempfile.mkdtemp())
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(extract_dir)
+
+        # Find extracted folder (usually valtec-tts-dev/)
+        extracted_subdirs = [d for d in extract_dir.iterdir() if d.is_dir()]
+        if not extracted_subdirs:
+            raise RuntimeError("ZIP extracted but no directory found inside")
+
+        source_dir = extracted_subdirs[0]
+
+        # Verify infer.py exists
+        if not (source_dir / "infer.py").exists():
+            raise RuntimeError("Downloaded archive does not contain infer.py")
+
+        # Move to target location
+        if target_dir.exists():
+            shutil.rmtree(target_dir, ignore_errors=True)
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source_dir), str(target_dir))
+
+        print(f"[ValtecTTS] Repository downloaded successfully to {target_dir}")
+
+        if str(target_dir) not in sys.path:
+            sys.path.insert(0, str(target_dir))
+
+        return str(target_dir)
+
+    except Exception as e:
+        # Cleanup on failure
+        if target_dir.exists():
+            shutil.rmtree(target_dir, ignore_errors=True)
+        raise RuntimeError(f"Failed to setup valtec-tts repo: {e}")
+    finally:
+        # Cleanup temp files
+        if zip_path and os.path.exists(zip_path):
+            os.unlink(zip_path)
+        if extract_dir and extract_dir.exists():
+            shutil.rmtree(extract_dir, ignore_errors=True)
+
+
+# Ensure repo is available before importing valtec_tts
+_VALTEC_REPO_PATH = _ensure_valtec_repo()
 
 
 class TTSProvider(TTSProviderBase):
