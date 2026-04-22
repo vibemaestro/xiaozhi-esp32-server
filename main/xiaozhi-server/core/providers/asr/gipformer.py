@@ -2,7 +2,6 @@ import os
 import io
 import sys
 import wave
-import uuid
 import time
 from config.logger import setup_logging
 from typing import Optional, Tuple, List
@@ -101,9 +100,7 @@ class ASRProvider(ASRProviderBase):
                 f"Đang load model {self.quantize} từ local cache..."
             )
         else:
-            logger.bind(tag=TAG).info(
-                f"Đang tải model {self.quantize} từ {REPO_ID}..."
-            )
+            logger.bind(tag=TAG).info(f"Đang tải model {self.quantize} từ {REPO_ID}...")
 
         try:
             paths = {}
@@ -131,21 +128,22 @@ class ASRProvider(ASRProviderBase):
             samples_float32 = samples_float32 / 32768
             return samples_float32, f.getframerate()
 
+    def requires_file(self) -> bool:
+        return True
+
     async def speech_to_text(
-        self, opus_data: List[bytes], session_id: str, audio_format: str = "opus"
+        self,
+        opus_data: List[bytes],
+        session_id: str,
+        audio_format="opus",
+        artifacts=None,
     ) -> Tuple[Optional[str], Optional[str]]:
         """Chuyển đổi giọng nói sang văn bản tiếng Việt."""
         file_path = None
         try:
-            start_time = time.time()
-            if audio_format == "pcm":
-                pcm_data = opus_data
-            else:
-                pcm_data = self.decode_opus(opus_data)
-            file_path = self.save_audio_to_file(pcm_data, session_id)
-            logger.bind(tag=TAG).debug(
-                f"Lưu audio: {time.time() - start_time:.3f}s | {file_path}"
-            )
+            if artifacts is None:
+                return "", None
+            file_path = artifacts.file_path
 
             start_time = time.time()
             samples, sample_rate = self.read_wave(file_path)
@@ -160,12 +158,7 @@ class ASRProvider(ASRProviderBase):
             return text, file_path
 
         except Exception as e:
-            logger.bind(tag=TAG).error(f"Nhận dạng giọng nói thất bại: {e}", exc_info=True)
+            logger.bind(tag=TAG).error(
+                f"Nhận dạng giọng nói thất bại: {e}", exc_info=True
+            )
             return "", file_path
-        finally:
-            if self.delete_audio_file and file_path and os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    logger.bind(tag=TAG).debug(f"Đã xóa file tạm: {file_path}")
-                except Exception as e:
-                    logger.bind(tag=TAG).error(f"Xóa file thất bại: {file_path} | {e}")
