@@ -160,6 +160,7 @@ main/manager-web/node_modules
 main/xiaozhi-server/models/piper/*
 main/xiaozhi-server/models/SenseVoiceSmall/model.pt
 main/xiaozhi-server/models/sherpa-onnx*
+main/xiaozhi-server/models/valtec-tts-repo
 /main/xiaozhi-server/audio_ref/
 /audio_ref/
 /asr-models/iic/SenseVoiceSmall/
